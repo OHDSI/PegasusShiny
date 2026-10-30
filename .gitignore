@@ -1,0 +1,8 @@
+.Renviron
+.Rhistory
+.RData
+.Rproj.user/
+*.duckdb
+*.duckdb.wal
+rsconnect/
+*.idea/

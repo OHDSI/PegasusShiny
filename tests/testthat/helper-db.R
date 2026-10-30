@@ -10,9 +10,9 @@ createTestPool <- function() {
     maxSize = 1
   )
   withConnection(pool, function(connection) {
-    # Uses the working-tree copy of the data model so tests track the real schema.
+    # Uses the data model in sql/ so tests track the real schema.
     sql <- SqlRender::render(
-      SqlRender::readSql(file.path("..", "..", "..", "inst", "sql", "CreateDataModel.sql")),
+      SqlRender::readSql(file.path("..", "..", "sql", "CreateDataModel.sql")),
       database_schema = "main"
     )
     sql <- SqlRender::translate(sql, targetDialect = "duckdb")
@@ -21,9 +21,9 @@ createTestPool <- function() {
   pool
 }
 
-# Loads the development seed data (see extras/DevSeedData.sql) into the test database.
+# Loads the development seed data (see sql/DevSeedData.sql) into the test database.
 loadSeedData <- function(pool) {
-  sql <- paste(readLines(file.path("..", "..", "..", "extras", "DevSeedData.sql"), encoding = "UTF-8"), collapse = "\n")
+  sql <- paste(readLines(file.path("..", "..", "sql", "DevSeedData.sql"), encoding = "UTF-8"), collapse = "\n")
   sql <- gsub("@database_schema", "main", sql, fixed = TRUE)
   withConnection(pool, function(connection) {
     DatabaseConnector::executeSql(connection, sql, progressBar = FALSE, reportOverallTime = FALSE)

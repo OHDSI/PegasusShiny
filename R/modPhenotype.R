@@ -117,12 +117,15 @@ phenotypeMetaDataTable <- function(metaData) {
     return(data.frame(Attribute = character(0), Value = character(0)))
   }
   row <- metaData[1, ]
-  yesNo <- function(value) if (is.na(value)) "Not recorded" else if (value == 1) "Yes" else "No"
-  number <- function(value, unit) if (is.na(value)) "Not recorded" else paste(value, unit)
+  # Databases created before a column existed give NULL for it
+  missing <- function(value) is.null(value) || is.na(value)
+  yesNo <- function(value) if (missing(value)) "Not recorded" else if (value == 1) "Yes" else "No"
+  number <- function(value, unit) if (missing(value)) "Not recorded" else paste(value, unit)
   data.frame(
     Attribute = c(
       "Pharmacovigilance outcome", "Clinical course", "Expected care setting", "Sex constraint",
       "Minimum age", "Maximum age", "Minimum gap between episodes",
+      "Recommended cohort exit", "Recommended exit window",
       "Has discrete recorded symptoms", "Requires a diagnostic test or procedure",
       "Requires active treatment within 30 days", "Expects condition-specific follow-up or sequelae within 1 year"
     ),
@@ -131,6 +134,7 @@ phenotypeMetaDataTable <- function(metaData) {
       metaDataLabel(row$expectedCareSetting), metaDataLabel(row$sexConstraint),
       number(row$minAgeYears, "years"), number(row$maxAgeYears, "years"),
       number(row$minimumInterepisodeGapDays, "days"),
+      metaDataLabel(row$recommendedCohortExit), number(row$recommendedExitDays, "days"),
       yesNo(row$hasDiscreteRecordedSymptoms), yesNo(row$requiresDiagnosticTestOrProcedure),
       yesNo(row$requiresActiveTreatmentWithin30d), yesNo(row$expectsConditionSpecificFollowupOrSequelae1yr)
     )

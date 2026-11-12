@@ -39,6 +39,8 @@ CREATE TABLE @database_schema.phenotype_meta_data (
   min_age_years INT,
   max_age_years INT,
   minimum_interepisode_gap_days INT,
+  recommended_cohort_exit VARCHAR, -- 'END_OF_CONTINUOUS_OBSERVATION', 'FIXED_WINDOW_FROM_INDEX', or 'END_OF_ERA_WITH_PERSISTENCE_GAP'
+  recommended_exit_days INT, -- only for 'FIXED_WINDOW_FROM_INDEX'
   has_discrete_recorded_symptoms INT,
   requires_diagnostic_test_or_procedure INT,
   requires_active_treatment_within_30d INT,

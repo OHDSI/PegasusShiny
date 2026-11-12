@@ -29,6 +29,8 @@ CREATE TABLE @new_schema.phenotype_meta_data (
   min_age_years INT,
   max_age_years INT,
   minimum_interepisode_gap_days INT,
+  recommended_cohort_exit VARCHAR, -- 'END_OF_CONTINUOUS_OBSERVATION', 'FIXED_WINDOW_FROM_INDEX', or 'END_OF_ERA_WITH_PERSISTENCE_GAP'
+  recommended_exit_days INT, -- only for 'FIXED_WINDOW_FROM_INDEX'
   has_discrete_recorded_symptoms INT,
   requires_diagnostic_test_or_procedure INT,
   requires_active_treatment_within_30d INT,
@@ -288,9 +290,10 @@ INSERT INTO @new_schema.phenotype_ancestor
 SELECT phenotype_id, parent_phenotype_id
 FROM @old_schema.phenotype_ancestor;
 
+-- The recommended exit columns are not in older schemas, so they start empty
 INSERT INTO @new_schema.phenotype_meta_data
 SELECT phenotype_id, is_pharmacovigilance_outcome, clinical_course, expected_care_setting, sex_constraint,
-  min_age_years, max_age_years, minimum_interepisode_gap_days, has_discrete_recorded_symptoms,
+  min_age_years, max_age_years, minimum_interepisode_gap_days, NULL, NULL, has_discrete_recorded_symptoms,
   requires_diagnostic_test_or_procedure, requires_active_treatment_within_30d,
   expects_condition_specific_followup_or_sequelae_1yr
 FROM @old_schema.phenotype_meta_data;

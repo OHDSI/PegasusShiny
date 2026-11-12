@@ -32,6 +32,8 @@ getEnv <- function(name, required = TRUE) {
 }
 
 loadConfig <- function() {
+  databaseSchema <- getEnv("PEGASUS_DATABASE_SCHEMA")
+  progressSchema <- getEnv("PEGASUS_PROGRESS_SCHEMA", required = FALSE)
   dbms <- getEnv("PEGASUS_DBMS")
   connectionDetails <- DatabaseConnector::createConnectionDetails(
     dbms = dbms,
@@ -44,7 +46,9 @@ loadConfig <- function() {
     dbms = dbms,
     connectionDetails = connectionDetails,
     vocabulary = loadVocabularyConfig(),
-    databaseSchema = getEnv("PEGASUS_DATABASE_SCHEMA"),
+    databaseSchema = databaseSchema,
+    # Where the backend keeps its run progress tables; the data model schema when not set
+    progressSchema = if (is.null(progressSchema)) databaseSchema else progressSchema,
     llm = list(
       provider = getEnv("PEGASUS_LLM_PROVIDER", required = FALSE),
       endpoint = getEnv("PEGASUS_LLM_ENDPOINT"),

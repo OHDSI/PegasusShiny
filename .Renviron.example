@@ -5,6 +5,8 @@
 PEGASUS_DBMS=duckdb
 PEGASUS_SERVER=pegasus.duckdb
 PEGASUS_DATABASE_SCHEMA=main
+# Schema with the backend's run progress tables (pegasus_run, pegasus_run_step). Optional; defaults to the schema above.
+# PEGASUS_PROGRESS_SCHEMA=pegasus_ef
 
 # Database (PostgreSQL)
 # PEGASUS_DBMS=postgresql

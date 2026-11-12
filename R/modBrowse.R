@@ -150,14 +150,14 @@ browseUi <- function(id) {
 }
 
 browseServer <- function(id, connectionPool, databaseSchema, phenotypes, refreshPhenotypes, route, navigate, shortlist, onRefine,
-                         vocabularyRunner = NULL) {
+                         vocabularyRunner = NULL, progressSchema = databaseSchema) {
   # Evaluate eagerly so a missing argument fails at startup instead of on the first click.
   force(onRefine)
   moduleServer(id, function(input, output, session) {
     observeEvent(input$refresh, refreshPhenotypes())
 
     # Shows backend jobs in progress and keeps the list live while they run.
-    progressServer("progress", connectionPool, databaseSchema, refreshPhenotypes)
+    progressServer("progress", connectionPool, databaseSchema, progressSchema, refreshPhenotypes)
 
     observe({
       updateSelectInput(

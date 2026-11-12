@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 
 # Progress of backend Pegasus runs (see the ohda-pegasus flows). The backend queues a phenotype's run in
-# pegasus_run and records each pipeline step in pegasus_run_step. Both tables are created by the backend, so
-# everything here degrades to "no runs" when they do not exist yet.
+# pegasus_run and records each pipeline step in pegasus_run_step. Both tables are created by the backend, in its own
+# schema (PEGASUS_PROGRESS_SCHEMA; the data model schema when that is not set), so everything here degrades to
+# "no runs" when they do not exist yet. Phenotype names come from the data model schema.
 
 emptyRuns <- function() {
   data.frame(
@@ -41,7 +42,7 @@ emptySteps <- function() {
 }
 
 # The latest run of each phenotype that is in progress, or that failed within the last day.
-getRuns <- function(connection, databaseSchema) {
+getRuns <- function(connection, databaseSchema, progressSchema = databaseSchema) {
   sql <- "SELECT r.run_id,
     r.phenotype_id,
     p.phenotype_name,
@@ -49,22 +50,22 @@ getRuns <- function(connection, databaseSchema) {
     r.time_submitted,
     r.time_finished,
     r.error
-  FROM @database_schema.pegasus_run r
+  FROM @progress_schema.pegasus_run r
   INNER JOIN (
     SELECT phenotype_id, MAX(run_id) AS run_id
-    FROM @database_schema.pegasus_run
+    FROM @progress_schema.pegasus_run
     GROUP BY phenotype_id
   ) latest ON latest.run_id = r.run_id
   INNER JOIN @database_schema.phenotype p
     ON p.phenotype_id = r.phenotype_id
   ORDER BY r.time_submitted DESC;"
-  runs <- queryPegasus(connection, databaseSchema, sql)
+  runs <- queryPegasus(connection, databaseSchema, sql, progress_schema = progressSchema)
   cutoff <- Sys.time() - 24 * 3600
   recentFailure <- runs$status == "FAILED" & !is.na(runs$timeFinished) & runs$timeFinished > cutoff
   runs[runs$status %in% c("SUBMITTED", "RUNNING") | recentFailure, , drop = FALSE]
 }
 
-getRunSteps <- function(connection, databaseSchema, runIds) {
+getRunSteps <- function(connection, progressSchema, runIds) {
   if (length(runIds) == 0) {
     return(emptySteps())
   }
@@ -72,7 +73,8 @@ getRunSteps <- function(connection, databaseSchema, runIds) {
   FROM @database_schema.pegasus_run_step
   WHERE run_id IN (@run_ids)
   ORDER BY run_id, step_index;"
-  queryPegasus(connection, databaseSchema, sql, run_ids = as.integer(runIds))
+  # The steps table is only in the progress schema, so that is the schema this query is run against
+  queryPegasus(connection, progressSchema, sql, run_ids = as.integer(runIds))
 }
 
 isActiveRun <- function(status) {
@@ -138,7 +140,7 @@ progressUi <- function(id) {
 
 # Polls the run tables while the app is open. Whenever a run is in progress the phenotype summary is also
 # refreshed, so the status, concept set and cohort counts in the Browse list advance as the backend uploads results.
-progressServer <- function(id, connectionPool, databaseSchema, refreshPhenotypes, pollSeconds = 10) {
+progressServer <- function(id, connectionPool, databaseSchema, progressSchema, refreshPhenotypes, pollSeconds = 10) {
   moduleServer(id, function(input, output, session) {
     runs <- reactiveVal(emptyRuns())
     steps <- reactiveVal(emptySteps())
@@ -146,8 +148,8 @@ progressServer <- function(id, connectionPool, databaseSchema, refreshPhenotypes
     loadRuns <- function() {
       result <- tryCatch(
         withConnection(connectionPool, function(connection) {
-          currentRuns <- getRuns(connection, databaseSchema)
-          list(runs = currentRuns, steps = getRunSteps(connection, databaseSchema, currentRuns$runId))
+          currentRuns <- getRuns(connection, databaseSchema, progressSchema)
+          list(runs = currentRuns, steps = getRunSteps(connection, progressSchema, currentRuns$runId))
         }),
         error = function(e) list(runs = emptyRuns(), steps = emptySteps())
       )

@@ -131,6 +131,7 @@ function(input, output, session) {
     "browse",
     connectionPool = connectionPool,
     databaseSchema = config$databaseSchema,
+    progressSchema = config$progressSchema,
     phenotypes = phenotypes,
     refreshPhenotypes = refreshPhenotypes,
     route = route,

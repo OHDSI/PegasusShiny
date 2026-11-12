@@ -57,7 +57,7 @@ seriesGroups <- function(data, colorBy, databaseOrder, sourceLevels, evaluationT
   switch(
     colorBy,
     source = assignSeries(data$cdSourceType, sourceLevels, "Other source"),
-    database = assignSeries(data$cdmSourceAbbreviation, databaseOrder, "Other databases"),
+    database = assignSeries(data$databaseLabel, databaseOrder, "Other databases"),
     evaluationType = assignSeries(data$evaluationType, evaluationTypeLevels, "Other evaluation type"),
     cohort = assignSeries(data$cohortDefinitionName, cohortLevels, "Other cohorts"),
     stop("Unknown colorBy: ", colorBy)
@@ -72,7 +72,7 @@ hoverText <- function(data) {
     100 * data$sensitivity,
     htmltools::htmlEscape(data$phenotypeName),
     htmltools::htmlEscape(data$cohortDefinitionName),
-    htmltools::htmlEscape(data$cdmSourceAbbreviation),
+    htmltools::htmlEscape(data$databaseLabel),
     htmltools::htmlEscape(data$evaluationType),
     format(data$cohortSubjects, big.mark = ",", trim = TRUE)
   )
@@ -131,7 +131,7 @@ parsePointKey <- function(keys) {
 buildScatter <- function(data,
                          colorBy = "source",
                          showCi = FALSE,
-                         databaseOrder = unique(data$cdmSourceAbbreviation[order(data$databaseId)]),
+                         databaseOrder = unique(data$databaseLabel[order(data$databaseId)]),
                          sourceLevels = orderedLevels(data$cdSourceType, sourceTypeOrder),
                          evaluationTypeLevels = orderedLevels(data$evaluationType, evaluationTypeOrder),
                          cohortLevels = orderedLevels(data$cohortDefinitionName, character(0)),
@@ -211,13 +211,13 @@ buildScatter <- function(data,
 # The group is named on the x axis, so every box uses the same single color.
 buildComparison <- function(data,
                             groupBy = "database",
-                            databaseOrder = unique(data$cdmSourceAbbreviation[order(data$databaseId)])) {
+                            databaseOrder = unique(data$databaseLabel[order(data$databaseId)])) {
   if (nrow(data) == 0) {
     return(emptyPlot("No evaluations match the current filters.", source = "comparison"))
   }
   values <- switch(
     groupBy,
-    database = data$cdmSourceAbbreviation,
+    database = data$databaseLabel,
     source = data$cdSourceType,
     evaluationType = data$evaluationType,
     stop("Unknown groupBy: ", groupBy)

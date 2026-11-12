@@ -343,8 +343,8 @@ defaultMetricChoice <- function(evaluations) {
   if (nrow(evaluations) == 0) {
     return(list(database = NULL, evaluationType = NULL))
   }
-  pairs <- unique(evaluations[, c("phenotypeId", "cdmSourceAbbreviation", "evaluationType")])
-  counts <- table(paste(pairs$cdmSourceAbbreviation, pairs$evaluationType, sep = "\r"))
+  pairs <- unique(evaluations[, c("phenotypeId", "databaseLabel", "evaluationType")])
+  counts <- table(paste(pairs$databaseLabel, pairs$evaluationType, sep = "\r"))
   best <- names(counts)[which.max(counts)]
   parts <- strsplit(best, "\r", fixed = TRUE)[[1]]
   list(database = parts[1], evaluationType = parts[2])
@@ -367,7 +367,7 @@ comparisonMetrics <- function(evaluations, phenotypes, phenotypeIds, baselineId,
   medianOrNa <- function(x) if (all(is.na(x))) NA_real_ else stats::median(x, na.rm = TRUE)
   rows <- lapply(phenotypeIds, function(id) {
     found <- evaluations[
-      evaluations$phenotypeId == id & evaluations$cdmSourceAbbreviation %in% database &
+      evaluations$phenotypeId == id & evaluations$databaseLabel %in% database &
         evaluations$evaluationType %in% evaluationType, , drop = FALSE
     ]
     found <- found[order(found$cohortDefinitionName), , drop = FALSE]

@@ -159,6 +159,43 @@ queryPegasus <- function(connection, databaseSchema, sql, ...) {
   )
 }
 
+# A label that is unique per database. Several databases can share an abbreviation (different releases of one
+# data source), so the abbreviation alone cannot identify a database. Unique abbreviations are used as they are;
+# shared ones get the release identifier (or the release date), and the id as a last resort.
+databaseLabels <- function(databases) {
+  abbreviation <- as.character(databases$cdmSourceAbbreviation)
+  shared <- abbreviation %in% abbreviation[duplicated(abbreviation)]
+  isUsable <- function(x) !is.na(x) & nzchar(trimws(x))
+  identifier <- as.character(databases$cdmReleaseIdentifier)
+  releaseDate <- as.character(databases$cdmReleaseDate)
+  detail <- ifelse(isUsable(identifier), identifier, ifelse(isUsable(releaseDate), releaseDate, NA_character_))
+  label <- ifelse(shared & !is.na(detail), paste0(abbreviation, " (", detail, ")"), abbreviation)
+  stillShared <- label %in% label[duplicated(label)]
+  ifelse(stillShared, paste0(label, " #", databases$databaseId), label)
+}
+
+getDatabases <- function(connection, databaseSchema) {
+  sql <- "SELECT database_id,
+    cdm_source_name,
+    cdm_source_abbreviation,
+    cdm_release_date,
+    cdm_release_identifier,
+    vocabulary_version
+  FROM @database_schema.database_meta_data
+  ORDER BY database_id;"
+  databases <- queryPegasus(connection, databaseSchema, sql)
+  databases$databaseLabel <- databaseLabels(databases)
+  databases
+}
+
+# Adds databaseLabel to results that have a databaseId. The label is worked out over all databases, so it does
+# not change with the rows that happen to be in the result.
+addDatabaseLabel <- function(connection, databaseSchema, data) {
+  databases <- getDatabases(connection, databaseSchema)
+  data$databaseLabel <- databases$databaseLabel[match(data$databaseId, databases$databaseId)]
+  data
+}
+
 # One row per phenotype, with the counts needed to derive its status.
 getPhenotypeSummary <- function(connection, databaseSchema) {
   sql <- "SELECT p.phenotype_id,
@@ -228,6 +265,7 @@ getConceptSets <- function(connection, databaseSchema, phenotypeId) {
 
 getConceptSetPersonCounts <- function(connection, databaseSchema, phenotypeId) {
   sql <- "SELECT pc.concept_set_id,
+    d.database_id,
     d.cdm_source_abbreviation,
     pc.condition_persons,
     pc.procedure_persons,
@@ -243,8 +281,8 @@ getConceptSetPersonCounts <- function(connection, databaseSchema, phenotypeId) {
   INNER JOIN @database_schema.database_meta_data d
     ON d.database_id = pc.database_id
   WHERE pcs.phenotype_id = @phenotype_id
-  ORDER BY d.cdm_source_abbreviation;"
-  queryPegasus(connection, databaseSchema, sql, phenotype_id = as.integer(phenotypeId))
+  ORDER BY d.database_id;"
+  addDatabaseLabel(connection, databaseSchema, queryPegasus(connection, databaseSchema, sql, phenotype_id = as.integer(phenotypeId)))
 }
 
 getDraftTargets <- function(connection, databaseSchema, phenotypeId) {
@@ -318,12 +356,12 @@ getEvaluations <- function(connection, databaseSchema, phenotypeId = NULL, cohor
   evaluations <- do.call(queryPegasus, c(
     list(
       connection, databaseSchema,
-      paste(sql, where, "ORDER BY cd.cohort_definition_name, d.cdm_source_abbreviation, ev.evaluation_type;")
+      paste(sql, where, "ORDER BY cd.cohort_definition_name, d.database_id, ev.evaluation_type;")
     ),
     parameters
   ))
   evaluations$evaluationType[is.na(evaluations$evaluationType)] <- "Unspecified"
-  evaluations
+  addDatabaseLabel(connection, databaseSchema, evaluations)
 }
 
 emptyEvaluations <- function() {
@@ -335,6 +373,7 @@ emptyEvaluations <- function() {
     cdSourceType = character(0),
     databaseId = integer(0),
     cdmSourceAbbreviation = character(0),
+    databaseLabel = character(0),
     evaluationType = character(0),
     cohortEntries = numeric(0),
     cohortSubjects = numeric(0),
@@ -401,7 +440,7 @@ getPhenotypeDetails <- function(connection, databaseSchema, phenotypeId) {
     metaData = getPhenotypeMetaData(connection, databaseSchema, phenotypeId),
     conceptSets = getConceptSets(connection, databaseSchema, phenotypeId),
     personCounts = getConceptSetPersonCounts(connection, databaseSchema, phenotypeId),
-    databaseNames = getDatabases(connection, databaseSchema)$cdmSourceAbbreviation,
+    databaseNames = getDatabases(connection, databaseSchema)$databaseLabel,
     draftTargets = getDraftTargets(connection, databaseSchema, phenotypeId),
     cohorts = getCohortDefinitions(connection, databaseSchema, phenotypeId),
     evaluations = getEvaluations(connection, databaseSchema, phenotypeId),
@@ -484,7 +523,7 @@ getConceptSet <- function(connection, databaseSchema, conceptSetId) {
     cs_source_type
   FROM @database_schema.concept_set
   WHERE concept_set_id = @concept_set_id;"
-  queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId))
+  addDatabaseLabel(connection, databaseSchema, queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId)))
 }
 
 # Cohort definitions that use a concept set, with their phenotypes.
@@ -541,7 +580,8 @@ getConceptSetPhenotypes <- function(connection, databaseSchema, conceptSetId) {
 
 # Person counts of one concept set in every database.
 getConceptSetCounts <- function(connection, databaseSchema, conceptSetId) {
-  sql <- "SELECT d.cdm_source_abbreviation,
+  sql <- "SELECT d.database_id,
+    d.cdm_source_abbreviation,
     pc.condition_persons,
     pc.procedure_persons,
     pc.drug_persons,
@@ -554,7 +594,7 @@ getConceptSetCounts <- function(connection, databaseSchema, conceptSetId) {
   INNER JOIN @database_schema.database_meta_data d
     ON d.database_id = pc.database_id
   WHERE pc.concept_set_id = @concept_set_id
-  ORDER BY d.cdm_source_abbreviation;"
+  ORDER BY d.database_id;"
   queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId))
 }
 

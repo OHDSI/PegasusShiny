@@ -80,7 +80,7 @@ test_that("addPersonCountColumns adds one column per database", {
   conceptSets <- data.frame(conceptSetId = c(1, 2))
   counts <- data.frame(
     conceptSetId = c(1, 2, 1),
-    cdmSourceAbbreviation = c("A", "A", "B"),
+    databaseLabel = c("A", "A", "B"),
     overallPersons = c(10, 20, 30)
   )
   result <- addPersonCountColumns(conceptSets, counts)
@@ -230,4 +230,30 @@ test_that("the browse server shows the level bar for the current route and looks
       expect_match(as.character(output$levelBar$html), "Asthma", fixed = TRUE)
     }
   )
+})
+
+test_that("databaseLabels keeps unique abbreviations and tells shared ones apart", {
+  databases <- data.frame(
+    databaseId = 1:5,
+    cdmSourceAbbreviation = c("A", "B", "B", "C", "C"),
+    cdmReleaseIdentifier = c("v1", "v1", "v2", NA, NA),
+    cdmReleaseDate = c("2024-01-01", "2024-01-01", "2025-01-01", "2024-01-01", "2024-01-01")
+  )
+  labels <- databaseLabels(databases)
+  expect_equal(labels[1:3], c("A", "B (v1)", "B (v2)"))
+  # Same abbreviation and release date and no identifier: the id breaks the tie
+  expect_equal(labels[4:5], c("C (2024-01-01) #4", "C (2024-01-01) #5"))
+  expect_false(anyDuplicated(labels) > 0)
+})
+
+test_that("person counts of databases with the same abbreviation stay in separate columns", {
+  conceptSets <- data.frame(conceptSetId = c(1, 2))
+  counts <- data.frame(
+    conceptSetId = c(1, 2, 1, 2),
+    databaseLabel = c("D (v1)", "D (v1)", "D (v2)", "D (v2)"),
+    overallPersons = c(10, 20, 30, 40)
+  )
+  result <- addPersonCountColumns(conceptSets, counts)
+  expect_equal(result[["D (v1)"]], c(10, 20))
+  expect_equal(result[["D (v2)"]], c(30, 40))
 })

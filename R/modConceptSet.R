@@ -230,7 +230,7 @@ conceptSetServer <- function(id, connectionPool, databaseSchema, conceptSetId, n
       counts <- detail$counts
       result <- showTable(
         data.frame(
-          Database = htmltools::htmlEscape(counts$cdmSourceAbbreviation),
+          Database = htmltools::htmlEscape(counts$databaseLabel),
           Overall = counts$overallPersons,
           Condition = counts$conditionPersons,
           Procedure = counts$procedurePersons,

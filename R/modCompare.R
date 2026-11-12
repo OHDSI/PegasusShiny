@@ -103,7 +103,7 @@ compareServer <- function(id, connectionPool, databaseSchema, phenotypes, evalua
       )
 
       found <- evaluations()[evaluations()$phenotypeId %in% ids, , drop = FALSE]
-      databases <- unique(found$cdmSourceAbbreviation[order(found$databaseId)])
+      databases <- unique(found$databaseLabel[order(found$databaseId)])
       types <- orderedLevels(found$evaluationType, evaluationTypeOrder)
       default <- defaultMetricChoice(found)
       keep <- function(value, choices, fallback) if (!is.null(value) && value %in% choices) value else fallback

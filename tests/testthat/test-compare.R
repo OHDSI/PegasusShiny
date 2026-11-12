@@ -81,8 +81,8 @@ test_that("a comparison covers definitions, concept sets and performance for one
   expect_match(baselineRow$cohortDefinitionName, "Median of 3 cohort definitions")
   expect_true(is.na(baselineRow$cohortDefinitionId))
   expect_false(anyNA(metrics$cohortDefinitionId[!grepl("^Median", metrics$cohortDefinitionName)]))
-  expect_equal(baselineRow$ppv, median(evaluations$ppv[evaluations$phenotypeId == 1 & evaluations$cdmSourceAbbreviation == "DEVCLM" & evaluations$evaluationType == "KEEPER + llm"]))
-  expect_equal(otherRow$ppv, median(evaluations$ppv[evaluations$phenotypeId == 2 & evaluations$cdmSourceAbbreviation == "DEVCLM" & evaluations$evaluationType == "KEEPER + llm"]))
+  expect_equal(baselineRow$ppv, median(evaluations$ppv[evaluations$phenotypeId == 1 & evaluations$databaseLabel == "DEVCLM" & evaluations$evaluationType == "KEEPER + llm"]))
+  expect_equal(otherRow$ppv, median(evaluations$ppv[evaluations$phenotypeId == 2 & evaluations$databaseLabel == "DEVCLM" & evaluations$evaluationType == "KEEPER + llm"]))
   expect_true(all(is.na(metrics$ppvDelta[metrics$phenotypeId == 1])))
   expect_equal(otherRow$ppvDelta, 100 * (otherRow$ppv - baselineRow$ppv))
   expect_equal(otherRow$sensitivityDelta, 100 * (otherRow$sensitivity - baselineRow$sensitivity))
@@ -99,7 +99,7 @@ test_that("a comparison covers definitions, concept sets and performance for one
 
 test_that("defaultMetricChoice picks the pair covering the most phenotypes", {
   evaluations <- data.frame(
-    phenotypeId = c(1, 2, 2, 3), cdmSourceAbbreviation = c("A", "A", "B", "B"),
+    phenotypeId = c(1, 2, 2, 3), databaseLabel = c("A", "A", "B", "B"),
     evaluationType = c("KEEPER + llm", "KEEPER + llm", "PheValuator", "PheValuator"), stringsAsFactors = FALSE
   )
   choice <- defaultMetricChoice(evaluations[evaluations$phenotypeId %in% c(2, 3), ])
@@ -200,7 +200,7 @@ test_that("the summary row of a phenotype is the median of its cohort definition
   evaluations <- data.frame(
     phenotypeId = c(1, 1, 1, 2), phenotypeName = c("A", "A", "A", "B"), cohortDefinitionId = c(11, 12, 13, 21),
     cohortDefinitionName = c("c1", "c2", "c3", "d1"),
-    cdmSourceAbbreviation = "DB", evaluationType = "T", ppv = c(0.5, 0.9, 0.7, 0.6), sensitivity = c(0.2, 0.4, 0.3, 0.9),
+    databaseLabel = "DB", evaluationType = "T", ppv = c(0.5, 0.9, 0.7, 0.6), sensitivity = c(0.2, 0.4, 0.3, 0.9),
     trueNegatives = 90, falsePositives = 10, falseNegatives = 10, stringsAsFactors = FALSE
   )
   phenotypes <- data.frame(phenotypeId = c(1, 2), phenotypeName = c("A", "B"))

@@ -45,7 +45,7 @@ test_that("hoverText escapes untrusted names", {
   data <- data.frame(
     phenotypeName = "<a href='x'>Evil</a>",
     cohortDefinitionName = "cohort & more",
-    cdmSourceAbbreviation = "DB",
+    databaseLabel = "DB",
     evaluationType = "PheValuator",
     ppv = 0.9,
     sensitivity = 0.8,
@@ -140,7 +140,7 @@ test_that("filterEvaluations restricts by phenotype, database, type, source and 
   expect_equal(nrow(filterWith(phenotypeIds = "1")), 7)
   expect_equal(nrow(filterWith(phenotypeIds = c("1", "2"))), 12)
   expect_equal(nrow(filterWith(phenotypeIds = "6")), 0)
-  expect_true(all(filterWith(databases = "DEVEHR")$cdmSourceAbbreviation == "DEVEHR"))
+  expect_true(all(filterWith(databases = "DEVEHR")$databaseLabel == "DEVEHR"))
   expect_equal(nrow(filterWith(phenotypeIds = "1", databases = "DEVREG")), 1)
   expect_true(all(filterWith(minPpv = 90)$ppv >= 0.9))
   expect_equal(nrow(filterWith(evalTypes = character(0))), 0)

@@ -35,10 +35,10 @@ formatPercentWithInterval <- function(estimate, lower, upper) {
 
 # Adds one column per database with the overall person count of each concept set. Databases without counts
 # get an empty column, so it is visible that nothing has been computed for them.
-addPersonCountColumns <- function(conceptSets, personCounts, databases = unique(personCounts$cdmSourceAbbreviation)) {
-  for (abbreviation in unique(c(databases, personCounts$cdmSourceAbbreviation))) {
-    counts <- personCounts[personCounts$cdmSourceAbbreviation == abbreviation, , drop = FALSE]
-    conceptSets[[abbreviation]] <- counts$overallPersons[match(conceptSets$conceptSetId, counts$conceptSetId)]
+addPersonCountColumns <- function(conceptSets, personCounts, databases = unique(personCounts$databaseLabel)) {
+  for (label in unique(c(databases, personCounts$databaseLabel))) {
+    counts <- personCounts[personCounts$databaseLabel == label, , drop = FALSE]
+    conceptSets[[label]] <- counts$overallPersons[match(conceptSets$conceptSetId, counts$conceptSetId)]
   }
   conceptSets
 }
@@ -86,7 +86,7 @@ evaluationTable <- function(evaluations, linkCohorts = TRUE) {
       htmltools::htmlEscape(evaluations$cohortDefinitionName)
     },
     Source = htmltools::htmlEscape(evaluations$cdSourceType),
-    Database = htmltools::htmlEscape(evaluations$cdmSourceAbbreviation),
+    Database = htmltools::htmlEscape(evaluations$databaseLabel),
     "Evaluation type" = htmltools::htmlEscape(evaluations$evaluationType),
     Subjects = evaluations$cohortSubjects,
     "PPV % (95% CI)" = formatPercentWithInterval(evaluations$ppv, evaluations$ppvLb, evaluations$ppvUb),
@@ -325,7 +325,7 @@ phenotypeDetailServer <- function(id, connectionPool, databaseSchema, phenotypes
       result <- showTable(
         data.frame(
           "Concept set" = entityLink("concept_set", counts$conceptSetId, names),
-          Database = htmltools::htmlEscape(counts$cdmSourceAbbreviation),
+          Database = htmltools::htmlEscape(counts$databaseLabel),
           Overall = counts$overallPersons,
           Condition = counts$conditionPersons,
           Procedure = counts$procedurePersons,

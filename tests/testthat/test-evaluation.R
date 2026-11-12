@@ -133,8 +133,8 @@ test_that("getEvaluationRequests derives the status from stored evaluations", {
     )
   })
   requests <- withConnection(pool, function(connection) getEvaluationRequests(connection, "main"))
-  expect_equal(requests$status[requests$cdmSourceAbbreviation == "DEVCLM"], "Complete")
-  expect_equal(requests$status[requests$cdmSourceAbbreviation == "DEVEHR"], "Queued")
+  expect_equal(requests$status[requests$databaseLabel == "DEVCLM"], "Complete")
+  expect_equal(requests$status[requests$databaseLabel == "DEVEHR"], "Queued")
 })
 
 test_that("Saving a phenotype reports its ID to the onSaved callback", {

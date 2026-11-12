@@ -40,17 +40,6 @@ validateCirceJson <- function(text) {
   )
 }
 
-getDatabases <- function(connection, databaseSchema) {
-  sql <- "SELECT database_id,
-    cdm_source_name,
-    cdm_source_abbreviation,
-    cdm_release_date,
-    vocabulary_version
-  FROM @database_schema.database_meta_data
-  ORDER BY database_id;"
-  queryPegasus(connection, databaseSchema, sql)
-}
-
 getNextId <- function(connection, databaseSchema, table, column) {
   sql <- sprintf("SELECT MAX(%s) AS max_id FROM @database_schema.%s;", column, table)
   maxId <- queryPegasus(connection, databaseSchema, sql)$maxId
@@ -319,6 +308,7 @@ getEvaluationRequests <- function(connection, databaseSchema, limit = 500) {
     p.phenotype_name,
     cd.cohort_definition_id,
     cd.cohort_definition_name,
+    d.database_id,
     d.cdm_source_abbreviation,
     r.evaluation_type,
     r.notes,
@@ -337,7 +327,7 @@ getEvaluationRequests <- function(connection, databaseSchema, limit = 500) {
   ORDER BY r.time_requested DESC, r.evaluation_request_id DESC;"
   requests <- queryPegasus(connection, databaseSchema, sql, limit = as.integer(limit))
   requests$status <- ifelse(requests$completed == 1, "Complete", "Queued")
-  requests
+  addDatabaseLabel(connection, databaseSchema, requests)
 }
 
 evaluationUi <- function(id) {
@@ -444,7 +434,7 @@ evaluationServer <- function(id, connectionPool, databaseSchema, userName, pheno
     observe({
       data <- databases()
       req(data)
-      choices <- stats::setNames(data$databaseId, sprintf("%s - %s", data$cdmSourceAbbreviation, data$cdmSourceName))
+      choices <- stats::setNames(data$databaseId, sprintf("%s - %s", data$databaseLabel, data$cdmSourceName))
       shinyWidgets::updatePickerInput(session, "databases", choices = choices, selected = isolate(input$databases))
     })
 
@@ -573,7 +563,7 @@ evaluationServer <- function(id, connectionPool, databaseSchema, userName, pheno
           By = htmltools::htmlEscape(data$requestedBy),
           Phenotype = entityLink("phenotype", data$phenotypeId, data$phenotypeName),
           Cohort = entityLink("cohort_definition", data$cohortDefinitionId, data$cohortDefinitionName),
-          Database = htmltools::htmlEscape(data$cdmSourceAbbreviation),
+          Database = htmltools::htmlEscape(data$databaseLabel),
           "Evaluation type" = htmltools::htmlEscape(data$evaluationType),
           Status = sprintf(
             '<span class="badge %s">%s</span>',

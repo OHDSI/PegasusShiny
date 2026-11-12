@@ -20,7 +20,7 @@ filterEvaluations <- function(data, evalTypes, sources, databases, phenotypeIds,
     data$ppv >= minPpv / 100 &
     data$sensitivity >= minSensitivity / 100
   if (length(databases) > 0) {
-    keep <- keep & data$cdmSourceAbbreviation %in% databases
+    keep <- keep & data$databaseLabel %in% databases
   }
   if (length(phenotypeIds) > 0) {
     keep <- keep & data$phenotypeId %in% as.integer(phenotypeIds)
@@ -109,7 +109,7 @@ performanceServer <- function(id, evaluations, shortlist, onOpenPhenotype, onCom
 
     databaseOrder <- reactive({
       data <- evaluations()
-      unique(data$cdmSourceAbbreviation[order(data$databaseId)])
+      unique(data$databaseLabel[order(data$databaseId)])
     })
 
     # Color slots come from all evaluations, so filtering does not repaint the remaining series.
@@ -229,7 +229,7 @@ performanceServer <- function(id, evaluations, shortlist, onOpenPhenotype, onCom
           Phenotype = entityLink("phenotype", data$phenotypeId, data$phenotypeName),
           Cohort = entityLink("cohort_definition", data$cohortDefinitionId, data$cohortDefinitionName),
           Source = htmltools::htmlEscape(data$cdSourceType),
-          Database = htmltools::htmlEscape(data$cdmSourceAbbreviation),
+          Database = htmltools::htmlEscape(data$databaseLabel),
           "Evaluation type" = htmltools::htmlEscape(data$evaluationType),
           Subjects = data$cohortSubjects,
           "PPV (%)" = toPercent(data$ppv),

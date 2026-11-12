@@ -523,7 +523,7 @@ getConceptSet <- function(connection, databaseSchema, conceptSetId) {
     cs_source_type
   FROM @database_schema.concept_set
   WHERE concept_set_id = @concept_set_id;"
-  addDatabaseLabel(connection, databaseSchema, queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId)))
+  queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId))
 }
 
 # Cohort definitions that use a concept set, with their phenotypes.
@@ -595,7 +595,7 @@ getConceptSetCounts <- function(connection, databaseSchema, conceptSetId) {
     ON d.database_id = pc.database_id
   WHERE pc.concept_set_id = @concept_set_id
   ORDER BY d.database_id;"
-  queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId))
+  addDatabaseLabel(connection, databaseSchema, queryPegasus(connection, databaseSchema, sql, concept_set_id = as.integer(conceptSetId)))
 }
 
 # The name of the entity a route points to, and for a cohort definition its phenotype, for the level bar in

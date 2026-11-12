@@ -128,7 +128,8 @@ browseUi <- function(id) {
           checkboxGroupInput(ns("status"), "Status", choices = statusLevels, selected = statusLevels),
           selectInput(ns("creator"), "Creator", choices = character(0), multiple = TRUE),
           helpText("Leave creator empty to show all creators."),
-          actionButton(ns("refresh"), "Refresh", icon = icon("rotate"), class = "btn-sm")
+          actionButton(ns("refresh"), "Refresh", icon = icon("rotate"), class = "btn-sm"),
+          progressUi(ns("progress"))
         ),
         bslib::card(
           full_screen = TRUE,
@@ -154,6 +155,9 @@ browseServer <- function(id, connectionPool, databaseSchema, phenotypes, refresh
   force(onRefine)
   moduleServer(id, function(input, output, session) {
     observeEvent(input$refresh, refreshPhenotypes())
+
+    # Shows backend jobs in progress and keeps the list live while they run.
+    progressServer("progress", connectionPool, databaseSchema, refreshPhenotypes)
 
     observe({
       updateSelectInput(

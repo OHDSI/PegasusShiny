@@ -21,9 +21,6 @@ function(input, output, session) {
   route <- reactiveVal(NULL)
   shortlist <- reactiveVal(integer(0))
   cloneSource <- reactiveVal(NULL)
-  returnToEvaluation <- reactiveVal(FALSE)
-  evaluationPreselect <- reactiveVal(NULL)
-  returnToLaunch <- reactiveVal(FALSE)
   launchPreselect <- reactiveVal(NULL)
   createPrefill <- reactiveVal(NULL)
   comparePreselect <- reactiveVal(NULL)
@@ -89,61 +86,46 @@ function(input, output, session) {
     navigate(target$page, target$id, push = FALSE)
   })
 
-  # Opens the New phenotype wizard seeded with an existing phenotype's definition. The nonce makes
-  # refining the same phenotype twice restart the wizard.
+  # The refinement wizard lives inside the Run Pegasus tab (see launchTabUi); these show it and bring the user back to the
+  # form once the refined phenotype is saved.
+  showLaunchForm <- function() bslib::nav_select("launchView", "form", session = session)
+  showRefinementWizard <- function() {
+    bslib::nav_select("launchView", "refine", session = session)
+    bslib::nav_select("mainNav", launchTabName, session = session)
+  }
+  observeEvent(input$launchBack, showLaunchForm())
+
+  # Opens the wizard seeded with an existing phenotype's definition. The nonce makes refining the same phenotype twice
+  # restart the wizard.
   refinePhenotype <- function(phenotypeId) {
     data <- phenotypes()
     row <- data[data$phenotypeId == phenotypeId, , drop = FALSE]
     if (nrow(row) != 1) {
       return(invisible(NULL))
     }
+    createPrefill(NULL)
     cloneSource(list(
       id = row$phenotypeId,
       name = row$phenotypeName,
       definition = row$clinicalDefinition,
       nonce = as.numeric(Sys.time())
     ))
-    bslib::nav_select("mainNav", "New Phenotype", session = session)
+    showRefinementWizard()
   }
 
-  # The Evaluation tab can send the user to create a phenotype and brings them back with it selected.
-  newPhenotypeForEvaluation <- function() {
-    returnToEvaluation(TRUE)
-    cloneSource(NULL)
-    bslib::nav_select("mainNav", "New Phenotype", session = session)
-  }
-
-  # The Run Pegasus tab can send a name and draft definition to the New phenotype wizard, which starts refining it
-  # straight away, and brings the user back with the saved phenotype chosen.
+  # The Run Pegasus form can send a name and draft definition to the wizard, which starts refining it straight away.
   refineForLaunch <- function(name, definition) {
-    returnToLaunch(TRUE)
-    returnToEvaluation(FALSE)
     cloneSource(NULL)
     createPrefill(list(name = name, definition = definition, nonce = as.numeric(Sys.time())))
-    bslib::nav_select("mainNav", "New Phenotype", session = session)
+    showRefinementWizard()
   }
 
+  # A saved phenotype goes back to the Run Pegasus form, chosen and ready to run.
   phenotypeSaved <- function(phenotypeId) {
-    if (returnToLaunch()) {
-      returnToLaunch(FALSE)
-      launchPreselect(list(id = phenotypeId, nonce = as.numeric(Sys.time())))
-      bslib::nav_select("mainNav", launchTabName, session = session)
-    } else if (returnToEvaluation()) {
-      returnToEvaluation(FALSE)
-      evaluationPreselect(list(id = phenotypeId, nonce = as.numeric(Sys.time())))
-      bslib::nav_select("mainNav", "New Evaluation", session = session)
-    } else {
-      openPhenotype(phenotypeId)
-    }
+    launchPreselect(list(id = phenotypeId, nonce = as.numeric(Sys.time())))
+    showLaunchForm()
+    bslib::nav_select("mainNav", launchTabName, session = session)
   }
-
-  # Leaving for any other tab abandons the round trip, so a later unrelated save does not jump back.
-  observeEvent(input$mainNav, {
-    if (!input$mainNav %in% c("New Evaluation", "New Phenotype")) {
-      returnToEvaluation(FALSE)
-      returnToLaunch(FALSE)
-    }
-  })
 
   browseServer(
     "browse",
@@ -170,16 +152,6 @@ function(input, output, session) {
     preselect = comparePreselect,
     onOpenPhenotype = openPhenotype
   )
-  evaluationServer(
-    "evaluation",
-    connectionPool = connectionPool,
-    databaseSchema = config$databaseSchema,
-    userName = getUserName(session),
-    phenotypes = phenotypes,
-    refreshPhenotypes = refreshPhenotypes,
-    preselect = evaluationPreselect,
-    onNewPhenotype = newPhenotypeForEvaluation
-  )
   conceptsServer(
     "concepts",
     connectionPool = connectionPool,
@@ -199,20 +171,18 @@ function(input, output, session) {
     onCompare = comparePhenotypes,
     onOpenCohortDefinition = function(cohortDefinitionId) navigate("cohort_definition", cohortDefinitionId)
   )
-  if (isTRUE(config$enableLaunch)) {
-    launchServer(
-      "launch",
-      connectionPool = connectionPool,
-      databaseSchema = config$databaseSchema,
-      progressSchema = config$progressSchema,
-      userName = getUserName(session),
-      phenotypes = phenotypes,
-      refreshPhenotypes = refreshPhenotypes,
-      onRefine = refineForLaunch,
-      preselect = launchPreselect,
-      llmConfig = config$llm
-    )
-  }
+  launchServer(
+    "launch",
+    connectionPool = connectionPool,
+    databaseSchema = config$databaseSchema,
+    progressSchema = config$progressSchema,
+    userName = getUserName(session),
+    phenotypes = phenotypes,
+    refreshPhenotypes = refreshPhenotypes,
+    onRefine = refineForLaunch,
+    preselect = launchPreselect,
+    llmConfig = config$llm
+  )
   createServer(
     "create",
     connectionPool = connectionPool,

@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Run Pegasus (Beta): requests a run of the backend pipeline with explicit parameters. The app writes a row to
-# pegasus_run_request (see sql/CreateProgressTables.sql) and the backend's queue poller turns it into a run, which then
-# shows up in the progress button on the Browse tab. Only parameters the backend accepts are offered.
+# Run Pegasus (Beta): requests a run of the backend pipeline with explicit parameters, and is where phenotypes are
+# created, refined and evaluated. The app writes a row to pegasus_run_request (see sql/CreateProgressTables.sql) and the
+# backend's queue poller turns it into a run, which then shows up in the progress button on the Browse tab. Only
+# parameters the backend accepts are sent; the cohort definition box is a preview of what is coming.
 
 # The steps of the backend pipeline, in order. Keep in step with Pegasus::createCohortDefinitionsAndEvaluateSteps; the
 # summary panel lists them so users can see what a launch will do.
@@ -35,6 +36,15 @@ launchPipelineSteps <- c(
 # The name of the tab, which other tabs use to send the user back to it.
 launchTabName <- "Run Pegasus (Beta)"
 
+# The step a user-supplied cohort definition would add. The backend does not run it yet, so the summary shows it
+# greyed out; it goes before the evaluation because the definition has to exist to be evaluated.
+launchUserDefinitionStep <- "Your cohort definition"
+
+launchSummarySteps <- function() {
+  evaluation <- length(launchPipelineSteps)
+  c(launchPipelineSteps[-evaluation], launchUserDefinitionStep, launchPipelineSteps[evaluation])
+}
+
 launchIntents <- c("New phenotype" = "NEW_PHENOTYPE", "Re-run an existing phenotype" = "RERUN")
 
 # Options users will want that the backend does not take yet. They are shown disabled so the layout stays put when
@@ -43,7 +53,6 @@ launchUnavailableOptions <- c(
   "Skip the MonoFlow cohort definitions",
   "Skip the template cohort definitions",
   "Regenerate concept sets instead of reusing existing ones",
-  "Add my own cohort definitions",
   "Choose the standard concept sets to use",
   "Evaluation types other than Keeper"
 )
@@ -205,7 +214,7 @@ launchUi <- function(id) {
         bslib::card(
           fill = FALSE,
           bslib::card_header("2. Phenotype"),
-          # Like the New phenotype tab: a name and an initial definition, which the assistant can refine.
+          # Like the refinement wizard: a name and an initial definition, which the assistant can refine.
           conditionalPanel(
             condition = sprintf("input['%s'] == 'NEW_PHENOTYPE' && !output['%s']", ns("intent"), ns("hasSaved")),
             tags$div(
@@ -243,10 +252,27 @@ launchUi <- function(id) {
           ),
           uiOutput(ns("databasesNote"))
         ),
+        bslib::card(
+          fill = FALSE,
+          bslib::card_header("4. Cohort definition (optional)"),
+          tags$div(
+            class = "alert alert-warning py-2",
+            icon("triangle-exclamation"), " ",
+            tags$strong("Not supported yet. "),
+            "The backend does not run user-supplied cohort definitions yet, so nothing entered here is sent with the launch."
+          ),
+          textInput(ns("cohortName"), "Cohort name", width = "100%"),
+          textAreaInput(
+            ns("circeJson"), "Circe JSON", rows = 12, width = "100%",
+            placeholder = "Paste the cohort definition exported from Atlas (Export > JSON)."
+          ),
+          uiOutput(ns("jsonStatus")),
+          numericInput(ns("atlasId"), "Atlas cohort ID (optional)", value = NA, min = 1, step = 1, width = "50%")
+        ),
         bslib::accordion(
           open = FALSE,
           bslib::accordion_panel(
-            "4. Advanced settings",
+            "5. Advanced settings",
             helpText("Leave these empty to use the backend's defaults."),
             textInput(ns("llmModel"), "Language model", placeholder = "Backend default", width = "100%"),
             textInput(ns("llmFrontierModel"), "Frontier model (cohort definition agent)", placeholder = "Backend default", width = "100%"),
@@ -292,8 +318,22 @@ launchUi <- function(id) {
   )
 }
 
-# onRefine(name, definition) sends the user to the New phenotype tab, which comes back with preselect = list(id, nonce)
-# once the refined phenotype is saved.
+# The tab's content: the form, and the New phenotype wizard (modCreate.R) that the "Refine description" button opens in
+# its place. The wizard is only reachable from here, so it keeps its own ids; launchView switches between the two.
+launchTabUi <- function() {
+  bslib::navset_hidden(
+    id = "launchView",
+    bslib::nav_panel_hidden("form", launchUi("launch")),
+    bslib::nav_panel_hidden(
+      "refine",
+      actionButton("launchBack", "Back to Run Pegasus", icon = icon("arrow-left"), class = "btn-outline-primary mb-3"),
+      createUi("create")
+    )
+  )
+}
+
+# onRefine(name, definition) opens the refinement wizard, which comes back with preselect = list(id, nonce) once the
+# refined phenotype is saved.
 launchServer <- function(id, connectionPool, databaseSchema, progressSchema, userName, phenotypes, refreshPhenotypes,
                          onRefine = function(name, definition) NULL, preselect = reactiveVal(NULL),
                          llmConfig = NULL) {
@@ -339,6 +379,16 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
     })
 
     observeEvent(input$clearSaved, savedPhenotypeId(NA_integer_))
+
+    # A cohort definition can be entered (and is checked) but is not sent yet: the backend does not take one.
+    hasCohortDefinition <- reactive(nzchar(trimws(if (is.null(input$circeJson)) "" else input$circeJson)))
+    output$jsonStatus <- renderUI({
+      if (!hasCohortDefinition()) {
+        return(NULL)
+      }
+      result <- validateCirceJson(input$circeJson)
+      tags$p(class = if (result$ok) "text-success small" else "text-danger small", result$message)
+    })
 
     output$savedSummary <- renderUI({
       id <- savedPhenotypeId()
@@ -469,7 +519,16 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
 
     output$summary <- renderUI({
       checks <- checklist()
-      steps <- tags$ol(class = "small mb-0 ps-3", lapply(launchPipelineSteps, tags$li))
+      steps <- tags$ol(
+        class = "small mb-0 ps-3",
+        lapply(launchSummarySteps(), function(step) {
+          if (identical(step, launchUserDefinitionStep)) {
+            tags$li(class = "text-muted", step, tags$span(class = "badge text-bg-secondary ms-1", "not supported yet"))
+          } else {
+            tags$li(step)
+          }
+        })
+      )
       setting <- function(label, value) {
         tags$tr(tags$td(class = "text-muted pe-3", label), tags$td(if (is.na(value)) tags$em("Backend default") else value))
       }
@@ -500,6 +559,12 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
             setting("Maximum cores", if (is.na(input$maxCores)) NA_character_ else as.character(input$maxCores))
           )
         ),
+        if (hasCohortDefinition()) {
+          tags$div(
+            class = "alert alert-warning py-2 small",
+            "A cohort definition is entered, but it will not be sent: the backend does not support one yet."
+          )
+        },
         tags$h6("Pipeline steps"),
         steps,
         tags$p(class = "small text-muted mt-2", "Every step runs; steps whose results already exist are reused by the backend.")

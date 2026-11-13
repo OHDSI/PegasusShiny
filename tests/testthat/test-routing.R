@@ -108,5 +108,5 @@ test_that("the address bar shows a landing page only on the Browse tab", {
   expect_equal(tabQuery("Browse", route), "?page=phenotype&id=5")
   expect_equal(tabQuery("Browse", NULL), "?")
   expect_equal(tabQuery("Performance", route), "?")
-  expect_equal(tabQuery("New Phenotype", route), "?")
+  expect_equal(tabQuery("Run Pegasus (Beta)", route), "?")
 })

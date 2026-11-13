@@ -14,14 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The Run Pegasus (Beta) tab is only added when PEGASUS_ENABLE_LAUNCH is set (see config.R).
-launchPanel <- if (isTRUE(config$enableLaunch)) {
-  list(bslib::nav_panel(launchTabName, launchUi("launch")))
-} else {
-  list()
-}
-
-do.call(bslib::page_navbar, c(list(
+bslib::page_navbar(
   title = "Pegasus",
   id = "mainNav",
   theme = pegasusTheme(),
@@ -35,9 +28,7 @@ do.call(bslib::page_navbar, c(list(
     shortlistUi("shortlist")
   ),
   bslib::nav_panel("Compare", compareUi("compare")),
-  bslib::nav_panel("New Phenotype", createUi("create")),
-  bslib::nav_panel("New Evaluation", evaluationUi("evaluation"))
-), launchPanel, list(
+  bslib::nav_panel(launchTabName, launchTabUi()),
   bslib::nav_spacer(),
   bslib::nav_item(tags$img(src = "LogoTiny.png", height = "40px", alt = "Pegasus logo"))
-)))
+)

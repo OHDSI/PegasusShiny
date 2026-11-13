@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Reads the text of a file a user hands to the New Phenotype chat. The file is only read, never copied or
+# Reads the text of a file a user hands to the refinement chat. The file is only read, never copied or
 # kept: the caller deletes the upload afterwards, and nothing here logs a file name or content.
 
 uploadExtensions <- c("pdf", "docx", "pptx", "xlsx", "csv")

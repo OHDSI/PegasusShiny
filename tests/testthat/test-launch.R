@@ -211,3 +211,54 @@ test_that("a saved new phenotype is launched without being created again", {
   request <- withConnection(pool, function(connection) getRunRequests(connection, "main", "main"))
   expect_equal(c(request$requestType, request$phenotypeId), c("NEW_PHENOTYPE", 7))
 })
+
+test_that("the user-supplied cohort definition shows in the summary steps, greyed out, before the evaluation", {
+  steps <- launchSummarySteps()
+  expect_equal(length(steps), length(launchPipelineSteps) + 1)
+  expect_equal(steps[length(steps) - 1], launchUserDefinitionStep)
+  expect_equal(steps[length(steps)], "Evaluation")
+  expect_equal(setdiff(steps, launchUserDefinitionStep), launchPipelineSteps)
+  # It is no longer one of the disabled options in the advanced settings
+  expect_false(any(grepl("Add my own", launchUnavailableOptions)))
+})
+
+test_that("the form has the cohort definition step with its notice, and the tab can show the wizard instead", {
+  html <- as.character(launchUi("launch"))
+  expect_match(html, "4. Cohort definition", fixed = TRUE)
+  expect_match(html, "does not run user-supplied cohort definitions yet", fixed = TRUE)
+  for (id in c("launch-cohortName", "launch-circeJson", "launch-atlasId", "launch-jsonStatus")) {
+    expect_match(html, id, fixed = TRUE)
+  }
+  expect_match(html, "5. Advanced settings", fixed = TRUE)
+  expect_false(grepl("Add my own cohort definitions", html, fixed = TRUE))
+
+  # createUi needs packages the tests do not otherwise use, so a stand-in is used for the wizard
+  original <- get("createUi", globalenv())
+  assign("createUi", function(id) tags$div(id = paste0(id, "-wizard")), globalenv())
+  on.exit(assign("createUi", original, globalenv()))
+  tab <- as.character(launchTabUi())
+  for (id in c("launchView", "launchBack", "create-wizard", "launch-circeJson")) {
+    expect_match(tab, id, fixed = TRUE)
+  }
+})
+
+test_that("a cohort definition that is entered is noticed but does not change the checklist", {
+  pool <- createTestPool()
+  on.exit(pool::poolClose(pool))
+  loadSeedData(pool)
+  loadProgressTables(pool)
+  phenotypes <- reactiveVal(withConnection(pool, function(connection) getPhenotypeSummary(connection, "main")))
+  testServer(
+    launchServer,
+    args = list(connectionPool = pool, databaseSchema = "main", progressSchema = "main", userName = "me",
+                phenotypes = phenotypes, refreshPhenotypes = function() NULL),
+    {
+      session$setInputs(intent = "RERUN", phenotype = "1", databases = "1", maxCores = NA, circeJson = "")
+      expect_false(hasCohortDefinition())
+      expect_true(all(checklist()$ok))
+      session$setInputs(circeJson = '{"PrimaryCriteria": {}}')
+      expect_true(hasCohortDefinition())
+      expect_true(all(checklist()$ok)) # still launchable: the definition is simply not sent
+    }
+  )
+})

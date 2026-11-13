@@ -15,6 +15,10 @@ The app was split out of [OHDSI/Pegasus](https://github.com/OHDSI/Pegasus) with 
    - `MigrateDataModel.sql` copies an older Pegasus schema into a new one (set `@old_schema` and `@new_schema`).
 3. Start the app from this folder: `shiny::runApp()`.
 
+## Launch Flow (Beta)
+
+Set `PEGASUS_ENABLE_LAUNCH=true` to show the Launch Flow (Beta) tab, which writes run requests for the backend to pick up. It needs the progress tables (see above), including `pegasus_run_request` and `pegasus_database_registry`.
+
 ## Tests
 
 `testthat::test_dir("tests/testthat")` from the project root. The database tests build a DuckDB database from the files in `sql/`.

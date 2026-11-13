@@ -14,7 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-bslib::page_navbar(
+# The Launch Flow (Beta) tab is only added when PEGASUS_ENABLE_LAUNCH is set (see config.R).
+launchPanel <- if (isTRUE(config$enableLaunch)) {
+  list(bslib::nav_panel("Launch Flow (Beta)", launchUi("launch")))
+} else {
+  list()
+}
+
+do.call(bslib::page_navbar, c(list(
   title = "Pegasus",
   id = "mainNav",
   theme = pegasusTheme(),
@@ -29,7 +36,8 @@ bslib::page_navbar(
   ),
   bslib::nav_panel("Compare", compareUi("compare")),
   bslib::nav_panel("New Phenotype", createUi("create")),
-  bslib::nav_panel("New Evaluation", evaluationUi("evaluation")),
+  bslib::nav_panel("New Evaluation", evaluationUi("evaluation"))
+), launchPanel, list(
   bslib::nav_spacer(),
   bslib::nav_item(tags$img(src = "LogoTiny.png", height = "40px", alt = "Pegasus logo"))
-)
+)))

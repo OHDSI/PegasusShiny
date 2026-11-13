@@ -28,3 +28,13 @@ INSERT INTO @progress_schema.pegasus_run_step (run_id, step_index, step_name, st
   (4, 2, 'Build concept sets', 'DONE'),
   (4, 3, 'Build cohort definitions', 'DONE'),
   (4, 4, 'Evaluate cohorts', 'DONE');
+
+INSERT INTO @progress_schema.pegasus_database_registry (database_name, description) VALUES
+  ('DEVCLM', 'Dev Claims Database'),
+  ('DEVEHR', 'Dev EHR Database'),
+  ('DEVREG', 'Dev Registry');
+
+INSERT INTO @progress_schema.pegasus_run_request (run_request_id, request_type, phenotype_id, database_names, llm_model, llm_frontier_model, max_cores, request_options, requested_by, time_requested, status, run_id, message) VALUES
+  (1, 'RERUN', 1, '["DEVCLM","DEVEHR"]', NULL, NULL, 4, NULL, 'developer', DATEADD(minute, -21, CAST(CURRENT_TIMESTAMP AS DATETIME)), 'CLAIMED', 1, NULL),
+  (2, 'RERUN', 2, '["DEVCLM"]', NULL, NULL, NULL, NULL, 'developer', DATEADD(minute, -2, CAST(CURRENT_TIMESTAMP AS DATETIME)), 'CLAIMED', 2, NULL),
+  (3, 'NEW_PHENOTYPE', 7, '["DEVEHR"]', NULL, NULL, NULL, NULL, 'developer', DATEADD(minute, -1, CAST(CURRENT_TIMESTAMP AS DATETIME)), 'REQUESTED', NULL, NULL);

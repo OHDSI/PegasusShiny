@@ -181,6 +181,17 @@ function(input, output, session) {
     onCompare = comparePhenotypes,
     onOpenCohortDefinition = function(cohortDefinitionId) navigate("cohort_definition", cohortDefinitionId)
   )
+  if (isTRUE(config$enableLaunch)) {
+    launchServer(
+      "launch",
+      connectionPool = connectionPool,
+      databaseSchema = config$databaseSchema,
+      progressSchema = config$progressSchema,
+      userName = getUserName(session),
+      phenotypes = phenotypes,
+      refreshPhenotypes = refreshPhenotypes
+    )
+  }
   createServer(
     "create",
     connectionPool = connectionPool,

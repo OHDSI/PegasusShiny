@@ -32,5 +32,8 @@ PEGASUS_LLM_API_KEY=<api key>
 PEGASUS_LLM_MODEL=o3
 PEGASUS_LLM_API_VERSION=2024-12-01-preview
 
+# Shows the Launch Flow (Beta) tab, which requests backend runs. Off unless set to true.
+# PEGASUS_ENABLE_LAUNCH=true
+
 # User name when not running on RConnect
 PEGASUS_DEFAULT_USER=developer

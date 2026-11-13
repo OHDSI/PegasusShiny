@@ -47,6 +47,8 @@ loadConfig <- function() {
     connectionDetails = connectionDetails,
     vocabulary = loadVocabularyConfig(),
     databaseSchema = databaseSchema,
+    # The Launch Flow (Beta) tab is only shown when this is true, so it can be tried on a dev deployment first
+    enableLaunch = tolower(Sys.getenv("PEGASUS_ENABLE_LAUNCH")) %in% c("true", "1", "yes"),
     # Where the backend keeps its run progress tables; the data model schema when not set
     progressSchema = if (is.null(progressSchema)) databaseSchema else progressSchema,
     llm = list(

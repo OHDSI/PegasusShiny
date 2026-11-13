@@ -139,6 +139,7 @@ shortlistUi <- function(id) {
     ),
     bslib::card(
       bslib::card_header("PPV vs sensitivity of the shortlist"),
+      scrollZoomSwitch(ns("scrollZoom")),
       plotly::plotlyOutput(ns("scatter"), height = "480px")
     )
   )
@@ -227,7 +228,8 @@ shortlistServer <- function(id, connectionPool, databaseSchema, phenotypes, eval
         colorBy = "source",
         source = scatterSource,
         selectable = FALSE,
-        emptyMessage = "Add phenotypes that have evaluations to compare their performance here."
+        emptyMessage = "Add phenotypes that have evaluations to compare their performance here.",
+        scrollZoom = input$scrollZoom
       )
     })
 

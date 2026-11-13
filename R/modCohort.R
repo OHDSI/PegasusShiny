@@ -83,6 +83,7 @@ cohortUi <- function(id) {
       bslib::nav_panel("Concept sets", uiOutput(ns("conceptSetNote")), DT::DTOutput(ns("conceptSets"))),
       bslib::nav_panel(
         "Performance",
+        scrollZoomSwitch(ns("scrollZoom")),
         plotly::plotlyOutput(ns("scatter"), height = "380px"),
         DT::DTOutput(ns("evaluations"))
       ),
@@ -268,7 +269,8 @@ cohortServer <- function(id, connectionPool, databaseSchema, cohortDefinitionId,
         showCi = TRUE,
         source = "cohortScatter",
         clickable = FALSE,
-        emptyMessage = "This cohort definition has not been evaluated."
+        emptyMessage = "This cohort definition has not been evaluated.",
+        scrollZoom = input$scrollZoom
       )
     })
 

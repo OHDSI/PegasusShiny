@@ -101,10 +101,53 @@ emptyPlot <- function(message, source = "emptyPlot", events = character(0)) {
   plot
 }
 
+# PPV, sensitivity and the other measures are percentages. The plots start at, and cannot be zoomed or dragged
+# beyond, this range: 0 to 100 with a little room so that markers on the edges are not cut in half.
+percentLimits <- c(-2, 102)
+
+# This plotly.js version has no built-in limit on an axis range, so a relayout handler keeps the axes inside the
+# limits: a pan that runs past an edge stops at it, and a zoom out stops at the full range.
+limitAxesToPercent <- function(plot, axes = c("x", "y")) {
+  htmlwidgets::onRender(
+    plot,
+    "function(el, x, data) {
+      var busy = false;
+      el.on('plotly_relayout', function() {
+        if (busy || !el._fullLayout) return;
+        var update = {};
+        data.axes.forEach(function(axis) {
+          var layoutAxis = el._fullLayout[axis + 'axis'];
+          if (!layoutAxis || !layoutAxis.range) return;
+          var low = layoutAxis.range[0], high = layoutAxis.range[1], span = high - low;
+          var min = data.limits[0], max = data.limits[1], next = null;
+          if (span >= max - min) {
+            if (low !== min || high !== max) next = [min, max];
+          } else if (low < min) {
+            next = [min, min + span];
+          } else if (high > max) {
+            next = [max - span, max];
+          }
+          if (next) update[axis + 'axis.range'] = next;
+        });
+        if (Object.keys(update).length === 0) return;
+        busy = true;
+        Plotly.relayout(el, update).then(function() { busy = false; }, function() { busy = false; });
+      });
+    }",
+    data = list(axes = as.list(axes), limits = as.list(percentLimits))
+  )
+}
+
+# The switch that turns zooming with the mouse wheel on. It is off unless asked for, because a wheel turn over a
+# plot while scrolling the page is easily mistaken for a zoom.
+scrollZoomSwitch <- function(id) {
+  bslib::input_switch(id, "Scroll to zoom", value = FALSE)
+}
+
 axisStyle <- function(title) {
   list(
     title = title,
-    range = c(-2, 102),
+    range = percentLimits,
     gridcolor = gridColor,
     gridwidth = 1,
     zeroline = FALSE,
@@ -138,7 +181,8 @@ buildScatter <- function(data,
                          source = "performanceScatter",
                          clickable = TRUE,
                          selectable = clickable,
-                         emptyMessage = "No evaluations match the current filters.") {
+                         emptyMessage = "No evaluations match the current filters.",
+                         scrollZoom = FALSE) {
   events <- c(if (clickable) "plotly_click", if (selectable) "plotly_selected")
   # Points without a PPV or sensitivity cannot be placed (plotly would drop them with a warning).
   data <- data[!is.na(data$ppv) & !is.na(data$sensitivity), , drop = FALSE]
@@ -200,18 +244,19 @@ buildScatter <- function(data,
     plot_bgcolor = surfaceColor,
     font = chartFont
   )
-  plot <- plotly::config(plot, displaylogo = FALSE, scrollZoom = TRUE)
+  plot <- plotly::config(plot, displaylogo = FALSE, scrollZoom = isTRUE(scrollZoom))
   for (event in events) {
     plot <- plotly::event_register(plot, event)
   }
-  plot
+  limitAxesToPercent(plot)
 }
 
 # PPV and sensitivity side by side (same 0-100% scale, so no dual axis), grouped by one dimension.
 # The group is named on the x axis, so every box uses the same single color.
 buildComparison <- function(data,
                             groupBy = "database",
-                            databaseOrder = unique(data$databaseLabel[order(data$databaseId)])) {
+                            databaseOrder = unique(data$databaseLabel[order(data$databaseId)]),
+                            scrollZoom = FALSE) {
   if (nrow(data) == 0) {
     return(emptyPlot("No evaluations match the current filters.", source = "comparison"))
   }
@@ -250,7 +295,7 @@ buildComparison <- function(data,
     linecolor = axisColor,
     tickfont = list(color = inkSecondary)
   )
-  plotly::config(
+  plot <- plotly::config(
     plotly::layout(
       plot,
       xaxis = categoryAxis,
@@ -267,6 +312,8 @@ buildComparison <- function(data,
       plot_bgcolor = surfaceColor,
       font = chartFont
     ),
-    displaylogo = FALSE
+    displaylogo = FALSE,
+    scrollZoom = isTRUE(scrollZoom)
   )
+  limitAxesToPercent(plot, axes = "y")
 }

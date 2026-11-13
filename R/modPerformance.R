@@ -83,6 +83,7 @@ performanceUi <- function(id) {
       bslib::nav_panel(
         "PPV vs sensitivity",
         radioButtons(ns("colorBy"), "Color by", choices = colorByChoices, selected = "source", inline = TRUE),
+        scrollZoomSwitch(ns("scrollZoom")),
         tags$div(
           class = "d-flex justify-content-between align-items-center",
           textOutput(ns("summary")),
@@ -95,6 +96,7 @@ performanceUi <- function(id) {
       bslib::nav_panel(
         "Compare",
         radioButtons(ns("groupBy"), "Group by", choices = groupByChoices, selected = "database", inline = TRUE),
+        scrollZoomSwitch(ns("scrollZoomCompare")),
         plotly::plotlyOutput(ns("comparison"), height = "520px")
       ),
       bslib::nav_panel("Table", DT::DTOutput(ns("table")))
@@ -163,13 +165,14 @@ performanceServer <- function(id, evaluations, shortlist, onOpenPhenotype, onCom
         databaseOrder = databaseOrder(),
         sourceLevels = sourceLevels(),
         evaluationTypeLevels = evaluationTypeLevels(),
-        source = scatterSource
+        source = scatterSource,
+        scrollZoom = input$scrollZoom
       )
     })
 
     output$comparison <- plotly::renderPlotly({
       req(input$groupBy)
-      buildComparison(filtered(), groupBy = input$groupBy, databaseOrder = databaseOrder())
+      buildComparison(filtered(), groupBy = input$groupBy, databaseOrder = databaseOrder(), scrollZoom = input$scrollZoomCompare)
     })
 
     selectedPhenotypeIds <- reactiveVal(integer(0))

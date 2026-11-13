@@ -156,6 +156,7 @@ phenotypeDetailUi <- function(id) {
       bslib::nav_panel(
         "Cohort comparison",
         radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
+        scrollZoomSwitch(ns("scrollZoom")),
         plotly::plotlyOutput(ns("scatter"), height = "380px"),
         DT::DTOutput(ns("evaluations"))
       ),
@@ -260,7 +261,8 @@ phenotypeDetailServer <- function(id, connectionPool, databaseSchema, phenotypes
         showCi = TRUE,
         source = "phenotypeScatter",
         clickable = FALSE,
-        emptyMessage = "No cohort definition of this phenotype has been evaluated."
+        emptyMessage = "No cohort definition of this phenotype has been evaluated.",
+        scrollZoom = input$scrollZoom
       )
     })
 

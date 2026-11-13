@@ -159,3 +159,20 @@ test_that("scatter points carry phenotype and cohort definition ids", {
   expect_equal(keys$cohortDefinitionId, c(31L, NA))
   expect_equal(parsePointKey("7")$phenotypeId, 7L)
 })
+
+test_that("plots are limited to the percentage range and only zoom with the wheel when asked", {
+  data <- seedEvaluations()
+  config <- function(plot) plotly::plotly_build(plot)$x$config
+  expect_false(config(buildScatter(data))$scrollZoom)
+  expect_true(config(buildScatter(data, scrollZoom = TRUE))$scrollZoom)
+  expect_false(config(buildComparison(data))$scrollZoom)
+  expect_true(config(buildComparison(data, scrollZoom = TRUE))$scrollZoom)
+
+  scatter <- buildScatter(data)
+  expect_equal(plotly::plotly_build(scatter)$x$layout$xaxis$range, percentLimits)
+  hooks <- scatter$jsHooks$render
+  expect_length(hooks, 1)
+  expect_equal(unlist(hooks[[1]]$data$limits), percentLimits)
+  expect_equal(unlist(hooks[[1]]$data$axes), c("x", "y"))
+  expect_equal(unlist(buildComparison(data)$jsHooks$render[[1]]$data$axes), "y")
+})

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Launch Flow (Beta): requests a run of the backend pipeline with explicit parameters. The app writes a row to
+# Run Pegasus (Beta): requests a run of the backend pipeline with explicit parameters. The app writes a row to
 # pegasus_run_request (see sql/CreateProgressTables.sql) and the backend's queue poller turns it into a run, which then
 # shows up in the progress button on the Browse tab. Only parameters the backend accepts are offered.
 
@@ -31,6 +31,9 @@ launchPipelineSteps <- c(
   "Cohort definitions (templates)",
   "Evaluation"
 )
+
+# The name of the tab, which other tabs use to send the user back to it.
+launchTabName <- "Run Pegasus (Beta)"
 
 launchIntents <- c("New phenotype" = "NEW_PHENOTYPE", "Re-run an existing phenotype" = "RERUN")
 
@@ -60,7 +63,10 @@ launchChecklist <- function(intent, name, description, phenotypeId, databaseName
   phenotypeId <- if (is.null(phenotypeId) || length(phenotypeId) == 0) NA_integer_ else phenotypeId
   maxCores <- if (is.null(maxCores) || length(maxCores) == 0) NA_real_ else maxCores
   rows <- list(check("Signed in", signedIn, "You are not logged in."))
-  if (identical(intent, "NEW_PHENOTYPE")) {
+  if (identical(intent, "NEW_PHENOTYPE") && !is.na(phenotypeId)) {
+    # The phenotype was already saved by the refinement wizard, so only the run settings remain.
+    rows <- c(rows, list(check("Phenotype saved", TRUE)))
+  } else if (identical(intent, "NEW_PHENOTYPE")) {
     nameOk <- nzchar(name) && !phenotypeNameExists(name, existingNames)
     rows <- c(rows, list(
       check("Phenotype name", nameOk, if (nzchar(name)) "A phenotype with this name already exists." else "Enter a name."),
@@ -124,15 +130,16 @@ getRegisteredDatabases <- function(connection, progressSchema) {
   )
 }
 
-# Saves a request for a phenotype that exists, and returns its id. A new phenotype is created first (draft, so it
-# shows in Browse as queued), which also reports a name that is already taken before anything is requested.
-submitRunRequest <- function(connection, databaseSchema, progressSchema, intent, phenotypeId = NA, name = "",
+# Saves a request for a phenotype that exists, and returns its id. A new phenotype without an id is created first (draft,
+# so it shows in Browse as queued), which also reports a name that is already taken before anything is requested. A new
+# phenotype that was already saved (by the refinement wizard) is passed with its id.
+submitRunRequest <- function(connection, databaseSchema, progressSchema, intent, phenotypeId = NA_integer_, name = "",
                              description = "", databaseNames, llmModel = NULL, llmFrontierModel = NULL, maxCores = NULL,
                              requestedBy) {
   if (length(databaseNames) == 0) {
     stop("Choose at least one database.")
   }
-  if (identical(intent, "NEW_PHENOTYPE")) {
+  if (identical(intent, "NEW_PHENOTYPE") && is.na(phenotypeId)) {
     phenotypeId <- savePhenotype(connection, databaseSchema, name, description, requestedBy)
   } else if (is.na(phenotypeId)) {
     stop("Choose the phenotype to re-run.")
@@ -210,11 +217,22 @@ launchUi <- function(id) {
         bslib::card(
           fill = FALSE,
           bslib::card_header("2. Phenotype"),
+          # Like the New phenotype tab: a name and an initial definition, which the assistant can refine.
           conditionalPanel(
-            condition = sprintf("input['%s'] == 'NEW_PHENOTYPE'", ns("intent")),
+            condition = sprintf("input['%s'] == 'NEW_PHENOTYPE' && !output['%s']", ns("intent"), ns("hasSaved")),
+            tags$div(
+              class = "d-flex justify-content-between align-items-center",
+              tags$span(class = "text-muted small", "Refine the definition with the assistant, or run it as written."),
+              uiOutput(ns("modelBadge"), inline = TRUE)
+            ),
             textInput(ns("name"), "Phenotype name", width = "100%"),
-            textAreaInput(ns("description"), "Clinical definition", rows = 8, width = "100%"),
-            uiOutput(ns("similarNames"))
+            textAreaInput(ns("description"), "Clinical definition (initial definition)", rows = 8, width = "100%"),
+            uiOutput(ns("similarNames")),
+            actionButton(ns("refine"), "Refine description", icon = icon("wand-magic-sparkles"), class = "btn-outline-primary")
+          ),
+          conditionalPanel(
+            condition = sprintf("input['%s'] == 'NEW_PHENOTYPE' && output['%s']", ns("intent"), ns("hasSaved")),
+            uiOutput(ns("savedSummary"))
           ),
           conditionalPanel(
             condition = sprintf("input['%s'] == 'RERUN'", ns("intent")),
@@ -286,10 +304,68 @@ launchUi <- function(id) {
   )
 }
 
-launchServer <- function(id, connectionPool, databaseSchema, progressSchema, userName, phenotypes, refreshPhenotypes) {
+# onRefine(name, definition) sends the user to the New phenotype tab, which comes back with preselect = list(id, nonce)
+# once the refined phenotype is saved.
+launchServer <- function(id, connectionPool, databaseSchema, progressSchema, userName, phenotypes, refreshPhenotypes,
+                         onRefine = function(name, definition) NULL, preselect = reactiveVal(NULL),
+                         llmConfig = NULL) {
   moduleServer(id, function(input, output, session) {
     requestsVersion <- reactiveVal(0)
     signedIn <- !is.null(userName)
+    # The phenotype saved by the refinement wizard, waiting to be run (NA when there is none).
+    savedPhenotypeId <- reactiveVal(NA_integer_)
+
+    # A flag the page reads to switch between the form and the summary of the saved phenotype ("" is false in the browser)
+    output$hasSaved <- renderText(if (is.na(savedPhenotypeId())) "" else "yes")
+    outputOptions(output, "hasSaved", suspendWhenHidden = FALSE)
+
+    output$modelBadge <- renderUI({
+      if (is.null(llmConfig)) return(NULL)
+      tags$span(
+        class = "badge text-bg-light border fw-normal", title = "The language model used for the refinement",
+        icon("microchip"), " ", llmModelLabel(llmConfig)
+      )
+    })
+
+    observeEvent(preselect(), {
+      id <- suppressWarnings(as.integer(preselect()$id))
+      if (length(id) == 1 && !is.na(id)) {
+        savedPhenotypeId(id)
+        updateRadioButtons(session, "intent", selected = "NEW_PHENOTYPE")
+        updateTextInput(session, "name", value = "")
+        updateTextAreaInput(session, "description", value = "")
+      }
+    }, ignoreNULL = TRUE)
+
+    observeEvent(input$refine, {
+      name <- trimws(input$name)
+      if (!nzchar(name)) {
+        showNotification("Please enter a phenotype name.", type = "warning")
+        return()
+      }
+      if (phenotypeNameExists(name, phenotypes()$phenotypeName)) {
+        showNotification(sprintf("A phenotype named '%s' already exists.", name), type = "error")
+        return()
+      }
+      onRefine(name, input$description)
+    })
+
+    observeEvent(input$clearSaved, savedPhenotypeId(NA_integer_))
+
+    output$savedSummary <- renderUI({
+      id <- savedPhenotypeId()
+      row <- phenotypes()[phenotypes()$phenotypeId %in% id, , drop = FALSE]
+      tags$div(
+        class = "alert alert-success",
+        tags$div(
+          class = "d-flex justify-content-between align-items-start",
+          tags$span(icon("circle-check"), " Saved ", tags$strong(if (nrow(row) == 1) row$phenotypeName else paste("phenotype", id)),
+                    " from the refinement. It will be run as it is saved."),
+          actionButton(session$ns("clearSaved"), "Use something else", class = "btn-sm btn-outline-secondary")
+        ),
+        if (nrow(row) == 1) tags$p(class = "small mt-2 mb-0", style = "white-space: pre-wrap;", row$clinicalDefinition)
+      )
+    })
 
     output$userNote <- renderUI({
       if (signedIn) tags$span(class = "text-muted small", paste("Requested as:", userName)) else
@@ -383,9 +459,14 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
       waiting || running
     })
 
+    # The phenotype this launch is about: the chosen one for a re-run, the saved one for a refined new phenotype.
+    launchPhenotypeId <- reactive({
+      if (identical(input$intent, "NEW_PHENOTYPE")) savedPhenotypeId() else selectedPhenotypeId()
+    })
+
     checklist <- reactive({
       launchChecklist(
-        intent = input$intent, name = input$name, description = input$description, phenotypeId = selectedPhenotypeId(),
+        intent = input$intent, name = input$name, description = input$description, phenotypeId = launchPhenotypeId(),
         databaseNames = input$databases, maxCores = input$maxCores, existingNames = phenotypes()$phenotypeName,
         hasActiveRun = hasActiveRun(), signedIn = signedIn
       )
@@ -397,8 +478,8 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
       setting <- function(label, value) {
         tags$tr(tags$td(class = "text-muted pe-3", label), tags$td(if (is.na(value)) tags$em("Backend default") else value))
       }
-      what <- if (identical(input$intent, "RERUN")) {
-        id <- selectedPhenotypeId()
+      what <- if (identical(input$intent, "RERUN") || !is.na(savedPhenotypeId())) {
+        id <- launchPhenotypeId()
         if (is.na(id)) NA_character_ else phenotypes()$phenotypeName[match(id, phenotypes()$phenotypeId)]
       } else {
         blankToNa(input$name)
@@ -446,7 +527,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
         withConnection(connectionPool, function(connection) {
           submitRunRequest(
             connection, databaseSchema, progressSchema,
-            intent = input$intent, phenotypeId = selectedPhenotypeId(), name = input$name, description = input$description,
+            intent = input$intent, phenotypeId = launchPhenotypeId(), name = input$name, description = input$description,
             databaseNames = input$databases, llmModel = input$llmModel, llmFrontierModel = input$llmFrontierModel,
             maxCores = input$maxCores, requestedBy = userName
           )
@@ -461,6 +542,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
       }
       showNotification("Launch requested. The backend will pick it up shortly.", type = "message")
       if (identical(input$intent, "NEW_PHENOTYPE")) {
+        savedPhenotypeId(NA_integer_)
         updateTextInput(session, "name", value = "")
         updateTextAreaInput(session, "description", value = "")
       }

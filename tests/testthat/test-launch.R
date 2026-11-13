@@ -24,6 +24,15 @@ test_that("launchChecklist is all ok for a complete new phenotype and a complete
   expect_true(all(checklistFor(intent = "RERUN", phenotypeId = 1L, name = "", description = "")$ok))
 })
 
+test_that("a new phenotype that the refinement already saved only needs its run settings", {
+  checks <- checklistFor(name = "", description = "", phenotypeId = 7L)
+  expect_true(all(checks$ok))
+  expect_true("Phenotype saved" %in% checks$item)
+  expect_false("Phenotype name" %in% checks$item)
+  expect_equal(checklistFor(name = "", description = "", phenotypeId = 7L, databaseNames = NULL)$item[
+    !checklistFor(name = "", description = "", phenotypeId = 7L, databaseNames = NULL)$ok], "Databases")
+})
+
 test_that("launchChecklist names what is missing", {
   failing <- function(...) checklistFor(...)$item[!checklistFor(...)$ok]
   expect_equal(failing(name = " "), "Phenotype name")
@@ -115,7 +124,8 @@ test_that("the registry and the seeded requests are read, and a missing registry
   registry <- withConnection(pool, function(connection) getRegisteredDatabases(connection, "main"))
   expect_equal(registry$databaseName, c("DEVCLM", "DEVEHR", "DEVREG"))
   requests <- withConnection(pool, function(connection) getRunRequests(connection, "main", "main"))
-  expect_equal(sort(requests$status), c("CLAIMED", "CLAIMED", "REQUESTED"))
+  expect_equal(sort(requests$status), c("CLAIMED", "CLAIMED", "CLAIMED", "CLAIMED", "REJECTED", "REQUESTED"))
+  expect_equal(requests$message[requests$status == "REJECTED"], "Unknown database(s): ['OLDDB']")
   # A claimed request shows the status of its run
   expect_equal(requests$runStatus[requests$runRequestId == 1], "RUNNING")
 })
@@ -139,12 +149,64 @@ test_that("the launch server launches a request only when the checklist is compl
                         llmModel = "", llmFrontierModel = "", onlyMine = FALSE)
       expect_false(all(checklist()$ok))
       session$setInputs(launch = 1)
-      expect_equal(nrow(requests()), 3) # nothing was saved: the definition is empty
+      expect_equal(nrow(requests()), 6) # nothing was saved: the definition is empty
 
       session$setInputs(description = "Gout is ...", launch = 2)
-      expect_equal(nrow(requests()), 4)
+      expect_equal(nrow(requests()), 7)
       expect_equal(refreshed, 1)
       expect_true("Gout" %in% withConnection(pool, function(connection) getPhenotypes(connection, "main"))$phenotypeName)
     }
   )
+})
+
+test_that("the refine button sends the name and definition away, and the saved phenotype comes back chosen", {
+  pool <- createTestPool()
+  on.exit(pool::poolClose(pool))
+  loadSeedData(pool)
+  loadProgressTables(pool, seed = TRUE)
+  phenotypes <- reactiveVal(withConnection(pool, function(connection) getPhenotypeSummary(connection, "main")))
+  preselect <- reactiveVal(NULL)
+  sent <- NULL
+
+  testServer(
+    launchServer,
+    args = list(
+      connectionPool = pool, databaseSchema = "main", progressSchema = "main", userName = "me",
+      phenotypes = phenotypes, refreshPhenotypes = function() NULL,
+      onRefine = function(name, definition) sent <<- list(name = name, definition = definition), preselect = preselect
+    ),
+    {
+      session$setInputs(intent = "NEW_PHENOTYPE", name = " ", description = "x", databases = "DEVCLM", maxCores = NA,
+                        llmModel = "", llmFrontierModel = "", onlyMine = FALSE, refine = 1)
+      expect_null(sent) # a name is needed
+      session$setInputs(name = "asthma", refine = 2)
+      expect_null(sent) # and it must not be taken
+      session$setInputs(name = "Gout", description = "Gout is ...", refine = 3)
+      expect_equal(sent, list(name = "Gout", definition = "Gout is ..."))
+
+      # The wizard saved a phenotype (here an existing one) and the tab is shown again
+      preselect(list(id = 7L, nonce = 1))
+      session$flushReact()
+      expect_equal(savedPhenotypeId(), 7L)
+      expect_true(all(checklist()$ok))
+
+      session$setInputs(clearSaved = 1)
+      expect_true(is.na(savedPhenotypeId()))
+    }
+  )
+})
+
+test_that("a saved new phenotype is launched without being created again", {
+  pool <- createTestPool()
+  on.exit(pool::poolClose(pool))
+  loadSeedData(pool)
+  loadProgressTables(pool)
+  before <- nrow(withConnection(pool, function(connection) getPhenotypes(connection, "main")))
+  result <- withConnection(pool, function(connection) {
+    submitRunRequest(connection, "main", "main", "NEW_PHENOTYPE", phenotypeId = 7L, databaseNames = "DEVCLM", requestedBy = "me")
+  })
+  expect_equal(result$phenotypeId, 7L)
+  expect_equal(nrow(withConnection(pool, function(connection) getPhenotypes(connection, "main"))), before)
+  request <- withConnection(pool, function(connection) getRunRequests(connection, "main", "main"))
+  expect_equal(c(request$requestType, request$phenotypeId), c("NEW_PHENOTYPE", 7))
 })

@@ -72,8 +72,10 @@ createUi <- function(id) {
   )
 }
 
+# prefill is NULL or list(name, definition, nonce): another tab (Run Pegasus) sends a name and an initial definition and
+# the refinement starts straight away, as if they had been entered here and Start pressed.
 createServer <- function(id, connectionPool, databaseSchema, llmConfig, systemPrompt, userName, phenotypes, refreshPhenotypes,
-                         cloneSource = reactiveVal(NULL), onSaved = function(phenotypeId) NULL) {
+                         cloneSource = reactiveVal(NULL), onSaved = function(phenotypeId) NULL, prefill = reactiveVal(NULL)) {
   moduleServer(id, function(input, output, session) {
     client <- NULL
     toolCalledThisTurn <- FALSE
@@ -239,8 +241,8 @@ createServer <- function(id, connectionPool, databaseSchema, llmConfig, systemPr
 
     observeEvent(input$clearClone, reset())
 
-    observeEvent(input$start, {
-      name <- trimws(input$name)
+    startRefinement <- function(name, initialDefinition) {
+      name <- trimws(name)
       if (!nzchar(name)) {
         showNotification("Please enter a phenotype name.", type = "warning")
         return()
@@ -267,10 +269,20 @@ createServer <- function(id, connectionPool, databaseSchema, llmConfig, systemPr
       updateTextInput(session, "saveName", value = name)
       updateTextAreaInput(session, "definition", value = "")
       bslib::nav_select("wizard", "refine")
-      prompt <- buildInitialPrompt(name, input$initialDefinition)
+      prompt <- buildInitialPrompt(name, initialDefinition)
       shinychat::chat_append("chat", prompt, role = "user")
       streamResponse(list(prompt))
-    })
+    }
+
+    observeEvent(input$start, startRefinement(input$name, input$initialDefinition))
+
+    observeEvent(prefill(), {
+      request <- prefill()
+      reset()
+      updateTextInput(session, "name", value = request$name)
+      updateTextAreaInput(session, "initialDefinition", value = request$definition)
+      startRefinement(request$name, request$definition)
+    }, ignoreNULL = TRUE)
 
     observeEvent(input$chat_user_input, {
       req(client)

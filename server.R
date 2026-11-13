@@ -23,6 +23,9 @@ function(input, output, session) {
   cloneSource <- reactiveVal(NULL)
   returnToEvaluation <- reactiveVal(FALSE)
   evaluationPreselect <- reactiveVal(NULL)
+  returnToLaunch <- reactiveVal(FALSE)
+  launchPreselect <- reactiveVal(NULL)
+  createPrefill <- reactiveVal(NULL)
   comparePreselect <- reactiveVal(NULL)
 
   # Opens the Compare tab with these phenotypes chosen.
@@ -110,8 +113,22 @@ function(input, output, session) {
     bslib::nav_select("mainNav", "New Phenotype", session = session)
   }
 
+  # The Run Pegasus tab can send a name and draft definition to the New phenotype wizard, which starts refining it
+  # straight away, and brings the user back with the saved phenotype chosen.
+  refineForLaunch <- function(name, definition) {
+    returnToLaunch(TRUE)
+    returnToEvaluation(FALSE)
+    cloneSource(NULL)
+    createPrefill(list(name = name, definition = definition, nonce = as.numeric(Sys.time())))
+    bslib::nav_select("mainNav", "New Phenotype", session = session)
+  }
+
   phenotypeSaved <- function(phenotypeId) {
-    if (returnToEvaluation()) {
+    if (returnToLaunch()) {
+      returnToLaunch(FALSE)
+      launchPreselect(list(id = phenotypeId, nonce = as.numeric(Sys.time())))
+      bslib::nav_select("mainNav", launchTabName, session = session)
+    } else if (returnToEvaluation()) {
       returnToEvaluation(FALSE)
       evaluationPreselect(list(id = phenotypeId, nonce = as.numeric(Sys.time())))
       bslib::nav_select("mainNav", "New Evaluation", session = session)
@@ -124,6 +141,7 @@ function(input, output, session) {
   observeEvent(input$mainNav, {
     if (!input$mainNav %in% c("New Evaluation", "New Phenotype")) {
       returnToEvaluation(FALSE)
+      returnToLaunch(FALSE)
     }
   })
 
@@ -189,7 +207,10 @@ function(input, output, session) {
       progressSchema = config$progressSchema,
       userName = getUserName(session),
       phenotypes = phenotypes,
-      refreshPhenotypes = refreshPhenotypes
+      refreshPhenotypes = refreshPhenotypes,
+      onRefine = refineForLaunch,
+      preselect = launchPreselect,
+      llmConfig = config$llm
     )
   }
   createServer(
@@ -202,6 +223,7 @@ function(input, output, session) {
     phenotypes = phenotypes,
     refreshPhenotypes = refreshPhenotypes,
     cloneSource = cloneSource,
-    onSaved = phenotypeSaved
+    onSaved = phenotypeSaved,
+    prefill = createPrefill
   )
 }

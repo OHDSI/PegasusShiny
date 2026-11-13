@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# The Launch Flow (Beta) tab is only added when PEGASUS_ENABLE_LAUNCH is set (see config.R).
+# The Run Pegasus (Beta) tab is only added when PEGASUS_ENABLE_LAUNCH is set (see config.R).
 launchPanel <- if (isTRUE(config$enableLaunch)) {
-  list(bslib::nav_panel("Launch Flow (Beta)", launchUi("launch")))
+  list(bslib::nav_panel(launchTabName, launchUi("launch")))
 } else {
   list()
 }

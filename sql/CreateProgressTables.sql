@@ -1,7 +1,10 @@
 -- Run progress tables. The backend writes pegasus_run and pegasus_run_step and the app reads them (see
 -- R/modProgress.R). The app writes pegasus_run_request (see R/modLaunch.R) and the backend reads and claims it.
 -- @progress_schema is the schema the app is pointed at with PEGASUS_PROGRESS_SCHEMA. It has to be on the same
--- database as the data model, because the app joins phenotype_id to the phenotype table there.
+-- database as the data model, because the app joins phenotype_id to the phenotype table there. The schema is created
+-- if it does not exist (this needs the right to create schemas; if you do not have it, create the schema first).
+CREATE SCHEMA IF NOT EXISTS @progress_schema;
+
 DROP TABLE IF EXISTS @progress_schema.pegasus_run_step;
 DROP TABLE IF EXISTS @progress_schema.pegasus_run;
 DROP TABLE IF EXISTS @progress_schema.pegasus_run_request;
@@ -26,7 +29,7 @@ CREATE TABLE @progress_schema.pegasus_run_step (
   status VARCHAR NOT NULL -- 'PENDING', 'RUNNING', 'DONE', or 'FAILED'
 );
 
--- A request to run the pipeline, written by the app's Launch Flow tab. The backend's queue poller turns each
+-- A request to run the pipeline, written by the app's Run Pegasus tab. The backend's queue poller turns each
 -- REQUESTED row into a pegasus_run and a pegasus-workflow flow run, then sets status to CLAIMED and run_id.
 -- The phenotype already exists in the data model when the request is written.
 CREATE TABLE @progress_schema.pegasus_run_request (

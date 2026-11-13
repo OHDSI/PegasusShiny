@@ -141,7 +141,9 @@ phenotypeMetaDataTable <- function(metaData) {
   )
 }
 
-phenotypeColorByChoices <- c("Cohort definition" = "cohort", "Database" = "database", "Evaluation type" = "evaluationType")
+phenotypeColorByChoices <- c(
+  "Source type" = "source", "Cohort definition" = "cohort", "Database" = "database", "Evaluation type" = "evaluationType"
+)
 
 phenotypeDetailUi <- function(id) {
   ns <- NS(id)
@@ -153,7 +155,7 @@ phenotypeDetailUi <- function(id) {
       height = "80vh",
       bslib::nav_panel(
         "Cohort comparison",
-        radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "cohort", inline = TRUE),
+        radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
         plotly::plotlyOutput(ns("scatter"), height = "380px"),
         DT::DTOutput(ns("evaluations"))
       ),

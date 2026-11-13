@@ -17,7 +17,7 @@ The app was split out of [OHDSI/Pegasus](https://github.com/OHDSI/Pegasus) with 
 
 ## Run Pegasus (Beta)
 
-Set `PEGASUS_ENABLE_LAUNCH=true` to show the Run Pegasus (Beta) tab, which writes run requests for the backend to pick up. It needs the progress tables (see above), including `pegasus_run_request` and `pegasus_database_registry`.
+Set `PEGASUS_ENABLE_LAUNCH=true` to show the Run Pegasus (Beta) tab, which writes run requests for the backend to pick up. It needs the progress tables (see above), including `pegasus_run_request`. The databases it offers are the ones in `database_meta_data`.
 
 ## Tests
 

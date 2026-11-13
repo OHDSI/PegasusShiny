@@ -8,7 +8,6 @@ CREATE SCHEMA IF NOT EXISTS @progress_schema;
 DROP TABLE IF EXISTS @progress_schema.pegasus_run_step;
 DROP TABLE IF EXISTS @progress_schema.pegasus_run;
 DROP TABLE IF EXISTS @progress_schema.pegasus_run_request;
-DROP TABLE IF EXISTS @progress_schema.pegasus_database_registry;
 
 -- One row per run of a phenotype. The app shows only the latest run (highest run_id) of each phenotype, and only
 -- while it is SUBMITTED or RUNNING, or for a day after it FAILED.
@@ -36,7 +35,7 @@ CREATE TABLE @progress_schema.pegasus_run_request (
   run_request_id INT PRIMARY KEY,
   request_type VARCHAR NOT NULL, -- 'NEW_PHENOTYPE' or 'RERUN'
   phenotype_id INT NOT NULL,
-  database_names VARCHAR NOT NULL, -- JSON array of names from pegasus_database_registry
+  database_ids VARCHAR NOT NULL, -- JSON array of database_id values from database_meta_data in the data model
   llm_model VARCHAR, -- NULL: the backend's default
   llm_frontier_model VARCHAR, -- NULL: the backend's default
   max_cores INT, -- NULL: the backend's default
@@ -46,12 +45,4 @@ CREATE TABLE @progress_schema.pegasus_run_request (
   status VARCHAR NOT NULL, -- 'REQUESTED', 'CLAIMED', or 'REJECTED'
   run_id INT, -- the pegasus_run created for the request, once CLAIMED
   message VARCHAR -- why a request was REJECTED
-);
-
--- The databases the backend can run against (the keys of its pegasus-databases secret; names only, no
--- connection details). Published by the backend so the app can offer them before any run has uploaded
--- database_meta_data for them.
-CREATE TABLE @progress_schema.pegasus_database_registry (
-  database_name VARCHAR PRIMARY KEY,
-  description VARCHAR
 );

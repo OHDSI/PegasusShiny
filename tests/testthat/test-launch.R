@@ -13,7 +13,7 @@ loadProgressTables <- function(pool, seed = FALSE) {
 checklistFor <- function(...) {
   arguments <- list(
     intent = "NEW_PHENOTYPE", name = "Gout", description = "Gout is ...", phenotypeId = NA_integer_,
-    databaseNames = "DEVCLM", maxCores = NA, existingNames = c("Asthma"), hasActiveRun = FALSE, signedIn = TRUE
+    databaseIds = 1L, maxCores = NA, existingNames = c("Asthma"), hasActiveRun = FALSE, signedIn = TRUE
   )
   arguments[names(list(...))] <- list(...)
   do.call(launchChecklist, arguments)
@@ -29,8 +29,8 @@ test_that("a new phenotype that the refinement already saved only needs its run 
   expect_true(all(checks$ok))
   expect_true("Phenotype saved" %in% checks$item)
   expect_false("Phenotype name" %in% checks$item)
-  expect_equal(checklistFor(name = "", description = "", phenotypeId = 7L, databaseNames = NULL)$item[
-    !checklistFor(name = "", description = "", phenotypeId = 7L, databaseNames = NULL)$ok], "Databases")
+  expect_equal(checklistFor(name = "", description = "", phenotypeId = 7L, databaseIds = NULL)$item[
+    !checklistFor(name = "", description = "", phenotypeId = 7L, databaseIds = NULL)$ok], "Databases")
 })
 
 test_that("launchChecklist names what is missing", {
@@ -38,7 +38,7 @@ test_that("launchChecklist names what is missing", {
   expect_equal(failing(name = " "), "Phenotype name")
   expect_equal(failing(name = "asthma"), "Phenotype name") # existing names are matched without regard to case
   expect_equal(failing(description = ""), "Clinical definition")
-  expect_equal(failing(databaseNames = NULL), "Databases")
+  expect_equal(failing(databaseIds = NULL), "Databases")
   expect_equal(failing(maxCores = 0), "Cores")
   expect_equal(failing(maxCores = 2.5), "Cores")
   expect_equal(failing(maxCores = 99), "Cores")
@@ -48,16 +48,18 @@ test_that("launchChecklist names what is missing", {
 })
 
 test_that("buildRunRequest leaves empty optional settings NA and writes the databases as a JSON array", {
-  request <- buildRunRequest(7, "RERUN", 3, c("A", "B"), llmModel = " ", maxCores = NULL, requestedBy = "me")
-  expect_equal(request$databaseNames, '["A","B"]')
+  request <- buildRunRequest(7, "RERUN", 3, c(11, 12), llmModel = " ", maxCores = NULL, requestedBy = "me")
+  expect_equal(request$databaseIds, "[11,12]")
   expect_true(is.na(request$llmModel))
   expect_true(is.na(request$maxCores))
   expect_equal(request$status, "REQUESTED")
-  expect_equal(parseDatabaseNames(request$databaseNames), "A, B")
-  expect_equal(parseDatabaseNames("not json"), "")
-  expect_equal(buildRunRequest(1, "RERUN", 1, "A", llmModel = " o3 ", maxCores = 6, requestedBy = "me")$llmModel, "o3")
+  databases <- data.frame(databaseId = c(11L, 12L), databaseLabel = c("A", "B (v2)"))
+  expect_equal(requestDatabaseLabels(request$databaseIds, databases), "A, B (v2)")
+  expect_equal(requestDatabaseLabels("[11,99]", databases), "A, #99") # an id that is not (any longer) known
+  expect_equal(requestDatabaseLabels("not json", databases), "")
+  expect_equal(buildRunRequest(1, "RERUN", 1, 11L, llmModel = " o3 ", maxCores = 6, requestedBy = "me")$llmModel, "o3")
   # A single database is still an array
-  expect_equal(buildRunRequest(1, "RERUN", 1, "A", requestedBy = "me")$databaseNames, '["A"]')
+  expect_equal(buildRunRequest(1, "RERUN", 1, 11L, requestedBy = "me")$databaseIds, "[11]")
 })
 
 test_that("requestStatusLabel follows the request and then its run", {
@@ -78,7 +80,7 @@ test_that("submitRunRequest creates the phenotype for a new one and saves the re
 
   result <- withConnection(pool, function(connection) {
     submitRunRequest(connection, "main", "main", "NEW_PHENOTYPE", name = "Gout", description = "Gout is ...",
-                     databaseNames = c("DEVCLM", "DEVEHR"), maxCores = 2, requestedBy = "me")
+                     databaseIds = c(1L, 2L), maxCores = 2, requestedBy = "me")
   })
   expect_equal(result$runRequestId, 1)
   phenotype <- withConnection(pool, function(connection) getPhenotypes(connection, "main"))
@@ -89,45 +91,44 @@ test_that("submitRunRequest creates the phenotype for a new one and saves the re
   expect_equal(requests$phenotypeName, "Gout")
   expect_equal(requests$status, "REQUESTED")
   expect_equal(requests$requestType, "NEW_PHENOTYPE")
-  expect_equal(parseDatabaseNames(requests$databaseNames), "DEVCLM, DEVEHR")
+  expect_equal(requests$databaseIds, "[1,2]")
   expect_true(is.na(requests$runStatus))
 
   # A name that is taken is reported before anything is requested
   expect_error(withConnection(pool, function(connection) {
     submitRunRequest(connection, "main", "main", "NEW_PHENOTYPE", name = "gout", description = "x",
-                     databaseNames = "DEVCLM", requestedBy = "me")
+                     databaseIds = 1L, requestedBy = "me")
   }), "already exists")
   expect_equal(nrow(withConnection(pool, function(connection) getRunRequests(connection, "main", "main"))), 1)
 
   # A re-run uses the phenotype as it is and gets the next id
   again <- withConnection(pool, function(connection) {
-    submitRunRequest(connection, "main", "main", "RERUN", phenotypeId = 1L, databaseNames = "DEVREG", requestedBy = "me")
+    submitRunRequest(connection, "main", "main", "RERUN", phenotypeId = 1L, databaseIds = 3L, requestedBy = "me")
   })
   expect_equal(again$runRequestId, 2)
   expect_equal(nrow(withConnection(pool, function(connection) getRunRequests(connection, "main", "main"))), 2)
   expect_error(withConnection(pool, function(connection) {
-    submitRunRequest(connection, "main", "main", "RERUN", databaseNames = "DEVREG", requestedBy = "me")
+    submitRunRequest(connection, "main", "main", "RERUN", databaseIds = 3L, requestedBy = "me")
   }), "Choose the phenotype")
   expect_error(withConnection(pool, function(connection) {
-    submitRunRequest(connection, "main", "main", "RERUN", phenotypeId = 1L, databaseNames = character(0), requestedBy = "me")
+    submitRunRequest(connection, "main", "main", "RERUN", phenotypeId = 1L, databaseIds = integer(0), requestedBy = "me")
   }), "at least one database")
 })
 
-test_that("the registry and the seeded requests are read, and a missing registry is empty", {
+test_that("the seeded requests are read with the status of their runs", {
   pool <- createTestPool()
   on.exit(pool::poolClose(pool))
   loadSeedData(pool)
-
-  expect_equal(nrow(withConnection(pool, function(connection) getRegisteredDatabases(connection, "main"))), 0)
-
   loadProgressTables(pool, seed = TRUE)
-  registry <- withConnection(pool, function(connection) getRegisteredDatabases(connection, "main"))
-  expect_equal(registry$databaseName, c("DEVCLM", "DEVEHR", "DEVREG"))
   requests <- withConnection(pool, function(connection) getRunRequests(connection, "main", "main"))
   expect_equal(sort(requests$status), c("CLAIMED", "CLAIMED", "CLAIMED", "CLAIMED", "REJECTED", "REQUESTED"))
-  expect_equal(requests$message[requests$status == "REJECTED"], "Unknown database(s): ['OLDDB']")
+  expect_equal(requests$message[requests$status == "REJECTED"], "Database id(s) not in database_meta_data: [999]")
   # A claimed request shows the status of its run
   expect_equal(requests$runStatus[requests$runRequestId == 1], "RUNNING")
+  # Every database a seeded request names, other than the rejected one, is in the data model
+  ids <- unique(unlist(lapply(requests$databaseIds[requests$status != "REJECTED"], jsonlite::fromJSON)))
+  known <- withConnection(pool, function(connection) getDatabases(connection, "main"))$databaseId
+  expect_true(all(ids %in% known))
 })
 
 test_that("the launch server launches a request only when the checklist is complete", {
@@ -145,7 +146,7 @@ test_that("the launch server launches a request only when the checklist is compl
       phenotypes = phenotypes, refreshPhenotypes = function() refreshed <<- refreshed + 1
     ),
     {
-      session$setInputs(intent = "NEW_PHENOTYPE", name = "Gout", description = "", databases = "DEVCLM", maxCores = NA,
+      session$setInputs(intent = "NEW_PHENOTYPE", name = "Gout", description = "", databases = "1", maxCores = NA,
                         llmModel = "", llmFrontierModel = "", onlyMine = FALSE)
       expect_false(all(checklist()$ok))
       session$setInputs(launch = 1)
@@ -176,7 +177,7 @@ test_that("the refine button sends the name and definition away, and the saved p
       onRefine = function(name, definition) sent <<- list(name = name, definition = definition), preselect = preselect
     ),
     {
-      session$setInputs(intent = "NEW_PHENOTYPE", name = " ", description = "x", databases = "DEVCLM", maxCores = NA,
+      session$setInputs(intent = "NEW_PHENOTYPE", name = " ", description = "x", databases = "1", maxCores = NA,
                         llmModel = "", llmFrontierModel = "", onlyMine = FALSE, refine = 1)
       expect_null(sent) # a name is needed
       session$setInputs(name = "asthma", refine = 2)
@@ -203,7 +204,7 @@ test_that("a saved new phenotype is launched without being created again", {
   loadProgressTables(pool)
   before <- nrow(withConnection(pool, function(connection) getPhenotypes(connection, "main")))
   result <- withConnection(pool, function(connection) {
-    submitRunRequest(connection, "main", "main", "NEW_PHENOTYPE", phenotypeId = 7L, databaseNames = "DEVCLM", requestedBy = "me")
+    submitRunRequest(connection, "main", "main", "NEW_PHENOTYPE", phenotypeId = 7L, databaseIds = 1L, requestedBy = "me")
   })
   expect_equal(result$phenotypeId, 7L)
   expect_equal(nrow(withConnection(pool, function(connection) getPhenotypes(connection, "main"))), before)

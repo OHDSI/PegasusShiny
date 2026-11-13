@@ -55,7 +55,7 @@ blankToNa <- function(x) {
 }
 
 # What has to be right before a run can be launched, one row per check (ok, and what is wrong when it is not).
-launchChecklist <- function(intent, name, description, phenotypeId, databaseNames, maxCores, existingNames,
+launchChecklist <- function(intent, name, description, phenotypeId, databaseIds, maxCores, existingNames,
                             hasActiveRun = FALSE, signedIn = TRUE) {
   check <- function(item, ok, detail = "") data.frame(item = item, ok = isTRUE(ok), detail = if (isTRUE(ok)) "" else detail)
   name <- trimws(if (is.null(name)) "" else name)
@@ -80,21 +80,21 @@ launchChecklist <- function(intent, name, description, phenotypeId, databaseName
   }
   coresOk <- is.na(maxCores) || (maxCores >= 1 && maxCores <= maxLaunchCores && maxCores == round(maxCores))
   rows <- c(rows, list(
-    check("Databases", length(databaseNames) > 0, "Choose at least one database."),
+    check("Databases", length(databaseIds) > 0, "Choose at least one database."),
     check("Cores", coresOk, sprintf("Use a whole number from 1 to %d, or leave it empty for the default.", maxLaunchCores))
   ))
   do.call(rbind, rows)
 }
 
 # One row for pegasus_run_request. Empty optional settings stay NA, which the backend reads as "use the default".
-buildRunRequest <- function(runRequestId, intent, phenotypeId, databaseNames, llmModel = NULL, llmFrontierModel = NULL,
+buildRunRequest <- function(runRequestId, intent, phenotypeId, databaseIds, llmModel = NULL, llmFrontierModel = NULL,
                             maxCores = NULL, requestedBy, timeRequested = Sys.time()) {
   attr(timeRequested, "tzone") <- "UTC"
   data.frame(
     runRequestId = as.integer(runRequestId),
     requestType = intent,
     phenotypeId = as.integer(phenotypeId),
-    databaseNames = as.character(jsonlite::toJSON(as.character(databaseNames), auto_unbox = FALSE)),
+    databaseIds = as.character(jsonlite::toJSON(as.integer(databaseIds), auto_unbox = FALSE)),
     llmModel = blankToNa(llmModel),
     llmFrontierModel = blankToNa(llmFrontierModel),
     maxCores = if (is.null(maxCores) || length(maxCores) == 0 || is.na(maxCores)) NA_integer_ else as.integer(maxCores),
@@ -108,35 +108,23 @@ buildRunRequest <- function(runRequestId, intent, phenotypeId, databaseNames, ll
   )
 }
 
-# The names in a request's database_names column.
-parseDatabaseNames <- function(json) {
+# The database ids in a request's database_ids column (a JSON array of database_meta_data ids), as one text per request
+# with the databases' labels. An id that is not in the databases table is shown as "#id".
+requestDatabaseLabels <- function(json, databases) {
   vapply(json, function(x) {
-    names <- tryCatch(jsonlite::fromJSON(x), error = function(e) character(0))
-    paste(names, collapse = ", ")
+    ids <- tryCatch(as.integer(jsonlite::fromJSON(x)), error = function(e) integer(0))
+    labels <- databases$databaseLabel[match(ids, databases$databaseId)]
+    paste(ifelse(is.na(labels), paste0("#", ids), labels), collapse = ", ")
   }, "", USE.NAMES = FALSE)
-}
-
-# Databases the backend can run against, published in pegasus_database_registry. Empty when the table is missing.
-getRegisteredDatabases <- function(connection, progressSchema) {
-  tryCatch(
-    queryPegasus(
-      connection, progressSchema,
-      "SELECT database_name, description FROM @database_schema.pegasus_database_registry ORDER BY database_name;"
-    ),
-    error = function(e) {
-      logEvent("database registry could not be read: ", conditionMessage(e))
-      data.frame(databaseName = character(0), description = character(0))
-    }
-  )
 }
 
 # Saves a request for a phenotype that exists, and returns its id. A new phenotype without an id is created first (draft,
 # so it shows in Browse as queued), which also reports a name that is already taken before anything is requested. A new
 # phenotype that was already saved (by the refinement wizard) is passed with its id.
 submitRunRequest <- function(connection, databaseSchema, progressSchema, intent, phenotypeId = NA_integer_, name = "",
-                             description = "", databaseNames, llmModel = NULL, llmFrontierModel = NULL, maxCores = NULL,
+                             description = "", databaseIds, llmModel = NULL, llmFrontierModel = NULL, maxCores = NULL,
                              requestedBy) {
-  if (length(databaseNames) == 0) {
+  if (length(databaseIds) == 0) {
     stop("Choose at least one database.")
   }
   if (identical(intent, "NEW_PHENOTYPE") && is.na(phenotypeId)) {
@@ -146,7 +134,7 @@ submitRunRequest <- function(connection, databaseSchema, progressSchema, intent,
   }
   runRequestId <- getNextId(connection, progressSchema, "pegasus_run_request", "run_request_id")
   request <- buildRunRequest(
-    runRequestId, intent, phenotypeId, databaseNames, llmModel, llmFrontierModel, maxCores, requestedBy
+    runRequestId, intent, phenotypeId, databaseIds, llmModel, llmFrontierModel, maxCores, requestedBy
   )
   insertPegasusRows(connection, progressSchema, "pegasus_run_request", request)
   list(runRequestId = runRequestId, phenotypeId = as.integer(phenotypeId))
@@ -155,7 +143,7 @@ submitRunRequest <- function(connection, databaseSchema, progressSchema, intent,
 emptyRunRequests <- function() {
   data.frame(
     runRequestId = integer(0), requestType = character(0), phenotypeId = integer(0), phenotypeName = character(0),
-    databaseNames = character(0), requestedBy = character(0), timeRequested = as.POSIXct(character(0)),
+    databaseIds = character(0), requestedBy = character(0), timeRequested = as.POSIXct(character(0)),
     status = character(0), runId = integer(0), runStatus = character(0), message = character(0),
     stringsAsFactors = FALSE
   )
@@ -166,7 +154,7 @@ getRunRequests <- function(connection, databaseSchema, progressSchema, limit = 2
     r.request_type,
     r.phenotype_id,
     p.phenotype_name,
-    r.database_names,
+    r.database_ids,
     r.requested_by,
     r.time_requested,
     r.status,
@@ -253,7 +241,7 @@ launchUi <- function(id) {
               noneSelectedText = "Choose one or more databases"
             )
           ),
-          uiOutput(ns("registryNote"))
+          uiOutput(ns("databasesNote"))
         ),
         bslib::accordion(
           open = FALSE,
@@ -372,25 +360,32 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
         tags$span(class = "text-danger small", "You are not logged in. Launching is disabled.")
     })
 
-    registry <- reactive({
+    # The databases the data model knows (database_meta_data), which are the ones a run has been made against before.
+    databases <- reactive({
       requestsVersion()
-      withConnection(connectionPool, function(connection) getRegisteredDatabases(connection, progressSchema))
-    })
-
-    observe({
-      data <- registry()
-      labels <- ifelse(is.na(data$description) | !nzchar(data$description), data$databaseName,
-                       paste0(data$databaseName, " - ", data$description))
-      shinyWidgets::updatePickerInput(
-        session, "databases", choices = stats::setNames(data$databaseName, labels), selected = isolate(input$databases)
+      tryCatch(
+        withConnection(connectionPool, function(connection) getDatabases(connection, databaseSchema)),
+        error = function(e) {
+          logEvent("databases could not be read: ", conditionMessage(e))
+          NULL
+        }
       )
     })
 
-    output$registryNote <- renderUI({
-      if (nrow(registry()) == 0) {
+    observe({
+      data <- req(databases())
+      shinyWidgets::updatePickerInput(
+        session, "databases",
+        choices = stats::setNames(data$databaseId, sprintf("%s - %s", data$databaseLabel, data$cdmSourceName)),
+        selected = isolate(input$databases)
+      )
+    })
+
+    output$databasesNote <- renderUI({
+      if (is.null(databases()) || nrow(databases()) == 0) {
         tags$div(
           class = "alert alert-info py-2 mb-0",
-          "The backend has not published a list of databases (the pegasus_database_registry table is empty or missing)."
+          "No databases are recorded in the data model yet (database_meta_data is empty or could not be read)."
         )
       }
     })
@@ -467,7 +462,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
     checklist <- reactive({
       launchChecklist(
         intent = input$intent, name = input$name, description = input$description, phenotypeId = launchPhenotypeId(),
-        databaseNames = input$databases, maxCores = input$maxCores, existingNames = phenotypes()$phenotypeName,
+        databaseIds = input$databases, maxCores = input$maxCores, existingNames = phenotypes()$phenotypeName,
         hasActiveRun = hasActiveRun(), signedIn = signedIn
       )
     })
@@ -499,7 +494,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
           class = "small mb-3",
           tags$tbody(
             setting("Phenotype", what),
-            setting("Databases", if (length(input$databases) == 0) NA_character_ else paste(input$databases, collapse = ", ")),
+            setting("Databases", if (length(input$databases) == 0) NA_character_ else paste(databases()$databaseLabel[match(as.integer(input$databases), databases()$databaseId)], collapse = ", ")),
             setting("Language model", blankToNa(input$llmModel)),
             setting("Frontier model", blankToNa(input$llmFrontierModel)),
             setting("Maximum cores", if (is.na(input$maxCores)) NA_character_ else as.character(input$maxCores))
@@ -528,7 +523,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
           submitRunRequest(
             connection, databaseSchema, progressSchema,
             intent = input$intent, phenotypeId = launchPhenotypeId(), name = input$name, description = input$description,
-            databaseNames = input$databases, llmModel = input$llmModel, llmFrontierModel = input$llmFrontierModel,
+            databaseIds = input$databases, llmModel = input$llmModel, llmFrontierModel = input$llmFrontierModel,
             maxCores = input$maxCores, requestedBy = userName
           )
         }),
@@ -563,7 +558,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
           By = htmltools::htmlEscape(data$requestedBy),
           Type = ifelse(data$requestType == "NEW_PHENOTYPE", "New phenotype", "Re-run"),
           Phenotype = entityLink("phenotype", data$phenotypeId, data$phenotypeName),
-          Databases = htmltools::htmlEscape(parseDatabaseNames(data$databaseNames)),
+          Databases = htmltools::htmlEscape(requestDatabaseLabels(data$databaseIds, databases())),
           Status = requestStatusLabel(data$status, data$runStatus),
           Message = htmltools::htmlEscape(ifelse(is.na(data$message), "", data$message)),
           check.names = FALSE

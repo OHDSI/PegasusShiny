@@ -54,47 +54,41 @@ filterPicker <- function(inputId, label, noneSelectedText, liveSearch = FALSE) {
 performanceUi <- function(id) {
   ns <- NS(id)
   tagList(
-    # All four filters are the same kind of dropdown so they line up; the thresholds and the switch sit on a second row.
-    # The card and its rows do not fill the height, so they take the room their contents need.
-    bslib::card(
+    # Filters on the left half, the plots on the right, so the scatter can be square.
+    # The cards do not fill the height, so they take the room their contents need.
+    bslib::layout_columns(
+      col_widths = c(6, 6),
       fill = FALSE,
-      bslib::card_header("Filters"),
-      bslib::card_body(
-        fillable = FALSE,
+      bslib::card(
         fill = FALSE,
-        bslib::layout_columns(
-          col_widths = c(3, 3, 3, 3),
+        bslib::card_header("Filters"),
+        bslib::card_body(
+          fillable = FALSE,
           fill = FALSE,
-          filterPicker(ns("phenotypes"), "Phenotypes", "All evaluated phenotypes", liveSearch = TRUE),
-          filterPicker(ns("databases"), "Databases", "All databases"),
-          filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
-          filterPicker(ns("sources"), "Source type", "None selected")
-        ),
-        bslib::layout_columns(
-          col_widths = c(3, 3, 3, 3),
-          fill = FALSE,
-          class = "align-items-end",
+          bslib::layout_columns(
+            col_widths = c(6, 6),
+            fill = FALSE,
+            filterPicker(ns("phenotypes"), "Phenotypes", "All evaluated phenotypes", liveSearch = TRUE),
+            filterPicker(ns("databases"), "Databases", "All databases"),
+            filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
+            filterPicker(ns("sources"), "Source type", "None selected")
+          ),
           sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
           sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
-          tags$div(
-            class = "pb-3",
-            bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = FALSE)
-          ),
-          tags$div()
+          bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = FALSE)
         )
-      )
-    ),
+      ),
     bslib::navset_card_tab(
       bslib::nav_panel(
         "PPV vs sensitivity",
         radioButtons(ns("colorBy"), "Color by", choices = colorByChoices, selected = "source", inline = TRUE),
         scrollZoomSwitch(ns("scrollZoom")),
         tags$div(
-          class = "d-flex justify-content-between align-items-center",
+          class = "d-flex flex-wrap justify-content-between align-items-center gap-2",
           textOutput(ns("summary")),
           uiOutput(ns("shortlistActions"))
         ),
-        plotly::plotlyOutput(ns("scatter"), height = "560px"),
+        squarePlotOutput(ns("scatter")),
         helpText("Click a point to open its phenotype, or drag a box around points to select them for the shortlist.",
                  "Only the first three databases get their own color; the rest are grouped as Other databases.")
       ),
@@ -105,6 +99,7 @@ performanceUi <- function(id) {
         plotly::plotlyOutput(ns("comparison"), height = "520px")
       ),
       bslib::nav_panel("Table", DT::DTOutput(ns("table")))
+    )
     )
   )
 }
@@ -195,7 +190,7 @@ performanceServer <- function(id, evaluations, shortlist, onOpenPhenotype, onCom
       inView <- length(unique(filtered()$phenotypeId))
       selected <- length(selectedPhenotypeIds())
       tags$div(
-        class = "d-flex gap-2",
+        class = "d-flex flex-wrap gap-2",
         if (selected > 0) {
           actionButton(session$ns("addSelected"), sprintf("Add %d selected to shortlist", selected),
                        icon = icon("plus"), class = "btn-primary btn-sm")

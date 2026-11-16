@@ -144,6 +144,15 @@ scrollZoomSwitch <- function(id) {
   bslib::input_switch(id, "Scroll to zoom", value = FALSE)
 }
 
+# A square plot area for the PPV vs sensitivity scatter (both axes run 0-100): as wide as its column, but never
+# taller than most of the window.
+squarePlotOutput <- function(outputId) {
+  tags$div(
+    style = "width: min(100%, 78vh); aspect-ratio: 1 / 1; margin: 0 auto;",
+    plotly::plotlyOutput(outputId, width = "100%", height = "100%")
+  )
+}
+
 axisStyle <- function(title) {
   list(
     title = title,

@@ -155,28 +155,31 @@ phenotypeDetailUi <- function(id) {
       height = "80vh",
       bslib::nav_panel(
         "Cohort comparison",
+        # Filters on the left half, the plot on the right, so the scatter can be square.
         bslib::layout_columns(
-          col_widths = c(3, 3, 3, 3),
+          col_widths = c(6, 6),
           fill = FALSE,
-          filterPicker(ns("cohortDefinitions"), "Cohort definitions", "All cohort definitions", liveSearch = TRUE),
-          filterPicker(ns("databases"), "Databases", "All databases"),
-          filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
-          filterPicker(ns("sources"), "Source type", "None selected")
+          tags$div(
+            bslib::layout_columns(
+              col_widths = c(6, 6),
+              fill = FALSE,
+              filterPicker(ns("cohortDefinitions"), "Cohort definitions", "All cohort definitions", liveSearch = TRUE),
+              filterPicker(ns("databases"), "Databases", "All databases"),
+              filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
+              filterPicker(ns("sources"), "Source type", "None selected")
+            ),
+            sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+            sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+            bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = TRUE),
+            radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
+            scrollZoomSwitch(ns("scrollZoom"))
+          ),
+          tags$div(
+            textOutput(ns("summary")),
+            squarePlotOutput(ns("scatter")),
+            helpText("Click a point to open its cohort definition.")
+          )
         ),
-        bslib::layout_columns(
-          col_widths = c(3, 3, 3, 3),
-          fill = FALSE,
-          class = "align-items-end",
-          sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
-          sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
-          tags$div(class = "pb-3", bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = TRUE)),
-          tags$div()
-        ),
-        radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
-        scrollZoomSwitch(ns("scrollZoom")),
-        textOutput(ns("summary")),
-        plotly::plotlyOutput(ns("scatter"), height = "380px"),
-        helpText("Click a point to open its cohort definition."),
         DT::DTOutput(ns("evaluations"))
       ),
       bslib::nav_panel("Cohort definitions", DT::DTOutput(ns("cohorts"))),

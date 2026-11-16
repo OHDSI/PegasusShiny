@@ -411,3 +411,34 @@ test_that("the cohort page marks identical stored concept sets and reports JSON 
     }
   )
 })
+
+test_that("phenotype cohort comparison filters evaluations and clicking a point opens its cohort definition", {
+  navigated <- NULL
+  pool <- createTestPool()
+  on.exit(pool::poolClose(pool))
+  loadSeedData(pool)
+  phenotypes <- reactiveVal(withConnection(pool, function(connection) getPhenotypeSummary(connection, "main")))
+  id <- reactiveVal(1L)
+  testServer(
+    phenotypeDetailServer,
+    args = list(
+      connectionPool = pool, databaseSchema = "main", phenotypes = phenotypes, phenotypeId = id,
+      shortlist = reactiveVal(integer(0)),
+      navigate = function(page = NULL, id = NULL) navigated <<- list(page = page, id = id),
+      onRefine = function(id) NULL
+    ),
+    {
+      all <- details()$evaluations
+      expect_gt(nrow(all), 0)
+      session$setInputs(minPpv = 0, minSensitivity = 0)
+      expect_equal(nrow(filteredEvaluations()), nrow(all))
+
+      first <- all$cohortDefinitionId[1]
+      session$setInputs(cohortDefinitions = first)
+      expect_true(all(filteredEvaluations()$cohortDefinitionId == first))
+
+      session$setInputs(cohortDefinitions = NULL, minPpv = 101)
+      expect_equal(nrow(filteredEvaluations()), 0)
+    }
+  )
+})

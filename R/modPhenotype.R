@@ -155,9 +155,28 @@ phenotypeDetailUi <- function(id) {
       height = "80vh",
       bslib::nav_panel(
         "Cohort comparison",
+        bslib::layout_columns(
+          col_widths = c(3, 3, 3, 3),
+          fill = FALSE,
+          filterPicker(ns("cohortDefinitions"), "Cohort definitions", "All cohort definitions", liveSearch = TRUE),
+          filterPicker(ns("databases"), "Databases", "All databases"),
+          filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
+          filterPicker(ns("sources"), "Source type", "None selected")
+        ),
+        bslib::layout_columns(
+          col_widths = c(3, 3, 3, 3),
+          fill = FALSE,
+          class = "align-items-end",
+          sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+          sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+          tags$div(class = "pb-3", bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = TRUE)),
+          tags$div()
+        ),
         radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
         scrollZoomSwitch(ns("scrollZoom")),
+        textOutput(ns("summary")),
         plotly::plotlyOutput(ns("scatter"), height = "380px"),
+        helpText("Click a point to open its cohort definition."),
         DT::DTOutput(ns("evaluations"))
       ),
       bslib::nav_panel("Cohort definitions", DT::DTOutput(ns("cohorts"))),
@@ -252,26 +271,94 @@ phenotypeDetailServer <- function(id, connectionPool, databaseSchema, phenotypes
       )
     }
 
+    scatterSource <- "phenotypeScatter"
+
+    # Every newly opened phenotype starts with all of its evaluations in view.
+    observeEvent(details(), {
+      detail <- details()
+      data <- detail$evaluations
+      evalTypes <- orderedLevels(data$evaluationType, evaluationTypeOrder)
+      sources <- orderedLevels(data$cdSourceType, sourceTypeOrder)
+      shinyWidgets::updatePickerInput(session, "evalTypes", choices = evalTypes, selected = evalTypes)
+      shinyWidgets::updatePickerInput(session, "sources", choices = sources, selected = sources)
+      shinyWidgets::updatePickerInput(session, "databases", choices = unique(data$databaseLabel[order(data$databaseId)]),
+                                      selected = character(0))
+      cohorts <- detail$cohorts[order(detail$cohorts$cohortDefinitionName), , drop = FALSE]
+      shinyWidgets::updatePickerInput(
+        session,
+        "cohortDefinitions",
+        choices = stats::setNames(cohorts$cohortDefinitionId, cohorts$cohortDefinitionName),
+        selected = character(0)
+      )
+      updateSliderInput(session, "minPpv", value = 0)
+      updateSliderInput(session, "minSensitivity", value = 0)
+    })
+
+    # Pickers that have not been filled yet (NULL) count as unrestricted.
+    filteredEvaluations <- reactive({
+      detail <- details()
+      req(detail)
+      data <- detail$evaluations
+      filterEvaluations(
+        data,
+        evalTypes = if (is.null(input$evalTypes)) unique(data$evaluationType) else input$evalTypes,
+        sources = if (is.null(input$sources)) unique(data$cdSourceType) else input$sources,
+        databases = input$databases,
+        phenotypeIds = integer(0),
+        minPpv = if (is.null(input$minPpv)) 0 else input$minPpv,
+        minSensitivity = if (is.null(input$minSensitivity)) 0 else input$minSensitivity,
+        cohortDefinitionIds = input$cohortDefinitions
+      )
+    })
+
+    output$summary <- renderText({
+      data <- filteredEvaluations()
+      sprintf(
+        "%s evaluations of %s cohort definitions",
+        format(nrow(data), big.mark = ","),
+        format(length(unique(data$cohortDefinitionId)), big.mark = ",")
+      )
+    })
+
     output$scatter <- plotly::renderPlotly({
       detail <- details()
       req(detail, input$colorBy)
+      all <- detail$evaluations
+      # Color slots come from all evaluations, so filtering does not repaint the remaining series.
       buildScatter(
-        detail$evaluations,
+        filteredEvaluations(),
         colorBy = input$colorBy,
-        showCi = TRUE,
-        source = "phenotypeScatter",
-        clickable = FALSE,
-        emptyMessage = "No cohort definition of this phenotype has been evaluated.",
+        showCi = isTRUE(input$showCi),
+        databaseOrder = unique(all$databaseLabel[order(all$databaseId)]),
+        sourceLevels = orderedLevels(all$cdSourceType, sourceTypeOrder),
+        evaluationTypeLevels = orderedLevels(all$evaluationType, evaluationTypeOrder),
+        cohortLevels = orderedLevels(all$cohortDefinitionName, character(0)),
+        source = scatterSource,
+        clickable = TRUE,
+        selectable = FALSE,
+        emptyMessage = if (nrow(all) == 0) {
+          "No cohort definition of this phenotype has been evaluated."
+        } else {
+          "No evaluations match the current filters."
+        },
         scrollZoom = input$scrollZoom
       )
+    })
+
+    observeEvent(plotly::event_data("plotly_click", source = scatterSource), {
+      clicked <- plotly::event_data("plotly_click", source = scatterSource)
+      key <- parsePointKey(clicked$customdata[1])
+      if (length(key$cohortDefinitionId) == 1 && !is.na(key$cohortDefinitionId)) {
+        navigate("cohort_definition", key$cohortDefinitionId)
+      }
     })
 
     output$evaluations <- DT::renderDT({
       detail <- details()
       req(detail)
       showTable(
-        evaluationTable(detail$evaluations),
-        "No cohort definition of this phenotype has been evaluated.",
+        evaluationTable(filteredEvaluations()),
+        "No evaluations match the current filters.",
         escape = FALSE
       )
     })

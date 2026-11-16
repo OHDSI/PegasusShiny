@@ -57,7 +57,7 @@ performanceUi <- function(id) {
     # Filters on the left half, the plots on the right, so the scatter can be square.
     # The cards do not fill the height, so they take the room their contents need.
     bslib::layout_columns(
-      col_widths = c(6, 6),
+      col_widths = c(4, 8),
       fill = FALSE,
       bslib::card(
         fill = FALSE,
@@ -73,8 +73,12 @@ performanceUi <- function(id) {
             filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
             filterPicker(ns("sources"), "Source type", "None selected")
           ),
-          sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
-          sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+          bslib::layout_columns(
+            col_widths = c(6, 6),
+            fill = FALSE,
+            sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+            sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%")
+          ),
           bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = FALSE)
         )
       ),

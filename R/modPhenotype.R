@@ -157,7 +157,7 @@ phenotypeDetailUi <- function(id) {
         "Cohort comparison",
         # Filters on the left half, the plot on the right, so the scatter can be square.
         bslib::layout_columns(
-          col_widths = c(6, 6),
+          col_widths = c(4, 8),
           fill = FALSE,
           tags$div(
             bslib::layout_columns(
@@ -168,8 +168,12 @@ phenotypeDetailUi <- function(id) {
               filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
               filterPicker(ns("sources"), "Source type", "None selected")
             ),
-            sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
-            sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+            bslib::layout_columns(
+              col_widths = c(6, 6),
+              fill = FALSE,
+              sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+              sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%")
+            ),
             bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = TRUE),
             radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
             scrollZoomSwitch(ns("scrollZoom"))

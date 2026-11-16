@@ -85,14 +85,17 @@ performanceUi <- function(id) {
     bslib::navset_card_tab(
       bslib::nav_panel(
         "PPV vs sensitivity",
-        radioButtons(ns("colorBy"), "Color by", choices = colorByChoices, selected = "source", inline = TRUE),
-        scrollZoomSwitch(ns("scrollZoom")),
         tags$div(
           class = "d-flex flex-wrap justify-content-between align-items-center gap-2",
           textOutput(ns("summary")),
           uiOutput(ns("shortlistActions"))
         ),
-        squarePlotOutput(ns("scatter")),
+        scatterPlotOutput(ns("scatter")),
+        tags$div(
+          class = "d-flex flex-wrap align-items-center column-gap-4",
+          radioButtons(ns("colorBy"), "Color by", choices = colorByChoices, selected = "source", inline = TRUE),
+          scrollZoomSwitch(ns("scrollZoom"))
+        ),
         helpText("Click a point to open its phenotype, or drag a box around points to select them for the shortlist.",
                  "Only the first three databases get their own color; the rest are grouped as Other databases.")
       ),

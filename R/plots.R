@@ -144,13 +144,10 @@ scrollZoomSwitch <- function(id) {
   bslib::input_switch(id, "Scroll to zoom", value = FALSE)
 }
 
-# A square plot area for the PPV vs sensitivity scatter (both axes run 0-100): as wide as its column, but never
-# taller than most of the window.
-squarePlotOutput <- function(outputId) {
-  tags$div(
-    style = "width: min(100%, 78vh); aspect-ratio: 1 / 1; margin: 0 auto;",
-    plotly::plotlyOutput(outputId, width = "100%", height = "100%")
-  )
+# The PPV vs sensitivity scatter fills its column's width. The default height leaves room above it for the tab
+# header and below it for the plot controls, so the whole plot fits in the window without scrolling.
+scatterPlotOutput <- function(outputId, height = "calc(100vh - 380px)") {
+  plotly::plotlyOutput(outputId, width = "100%", height = sprintf("max(%s, 420px)", height))
 }
 
 axisStyle <- function(title) {
@@ -246,6 +243,8 @@ buildScatter <- function(data,
     yaxis = axisStyle("PPV (%)"),
     showlegend = length(labels) > 1,
     legend = list(orientation = "h", x = 0, y = 1.1, font = list(color = inkSecondary)),
+    # Plotly's default margins (80-100px) leave a wide empty border; the axes titles and the legend need far less.
+    margin = list(l = 60, r = 15, t = if (length(labels) > 1) 40 else 15, b = 50),
     hovermode = "closest",
     hoverdistance = 24,
     dragmode = if (selectable) "select" else "zoom",

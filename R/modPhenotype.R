@@ -174,13 +174,16 @@ phenotypeDetailUi <- function(id) {
               sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
               sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%")
             ),
-            bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = TRUE),
-            radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
-            scrollZoomSwitch(ns("scrollZoom"))
+            bslib::input_switch(ns("showCi"), "Show 95% confidence intervals", value = TRUE)
           ),
           tags$div(
             textOutput(ns("summary")),
-            squarePlotOutput(ns("scatter")),
+            scatterPlotOutput(ns("scatter"), height = "calc(80vh - 330px)"),
+            tags$div(
+              class = "d-flex flex-wrap align-items-center column-gap-4",
+              radioButtons(ns("colorBy"), "Color by", choices = phenotypeColorByChoices, selected = "source", inline = TRUE),
+              scrollZoomSwitch(ns("scrollZoom"))
+            ),
             helpText("Click a point to open its cohort definition.")
           )
         ),

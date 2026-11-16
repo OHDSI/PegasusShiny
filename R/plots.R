@@ -292,23 +292,29 @@ buildComparison <- function(data,
 
   panel <- function(metric) {
     y <- 100 * data[[metric]]
+    # Each trace sets all of its own attributes (inherit = FALSE), so the box's line style cannot leak into the points.
+    plot <- plotly::plot_ly()
+    plot <- plotly::add_trace(
+      plot,
+      x = position,
+      y = y,
+      type = "box",
+      boxpoints = FALSE,
+      hoverinfo = "skip",
+      fillcolor = "rgba(51, 107, 145, 0.10)", # ohdsiBlue at 10% opacity
+      line = list(color = seriesColors[1], width = 1.5),
+      inherit = FALSE
+    )
     plotly::add_trace(
-      plotly::plot_ly(
-        x = position,
-        y = y,
-        type = "box",
-        boxpoints = FALSE,
-        hoverinfo = "skip",
-        fillcolor = "rgba(51, 107, 145, 0.10)", # ohdsiBlue at 10% opacity
-        line = list(color = seriesColors[1], width = 1.5)
-      ),
+      plot,
       x = position + jitter,
       y = y,
       text = hover,
       hoverinfo = "text",
       type = "scattergl",
       mode = "markers",
-      marker = list(color = seriesColors[1], size = 8, opacity = 0.55)
+      marker = list(color = seriesColors[1], size = 8, opacity = 0.55),
+      inherit = FALSE
     )
   }
   plot <- plotly::subplot(panel("ppv"), panel("sensitivity"), nrows = 1, shareY = TRUE, margin = 0.04)

@@ -283,27 +283,40 @@ buildComparison <- function(data,
   groupLevels <- orderedLevels(values, fixedOrder)
   counts <- as.integer(table(factor(values, levels = groupLevels)))
   categoryLabels <- sprintf("%s<br>n = %d", htmltools::htmlEscape(groupLevels), counts)
-  x <- categoryLabels[match(values, groupLevels)]
+  position <- match(values, groupLevels)
+  # Every point is drawn by WebGL. A box trace with boxpoints = "all" draws each point as an SVG element, which
+  # is very slow for thousands of evaluations, so the boxes only draw their summary and the points are a separate
+  # trace. The jitter is fixed (not random) so the plot does not change on every redraw.
+  jitter <- ((seq_along(position) * 0.6180339887) %% 1 - 0.5) * 0.5
   hover <- hoverText(data)
 
   panel <- function(metric) {
-    plotly::plot_ly(
-      x = x,
-      y = 100 * data[[metric]],
+    y <- 100 * data[[metric]]
+    plotly::add_trace(
+      plotly::plot_ly(
+        x = position,
+        y = y,
+        type = "box",
+        boxpoints = FALSE,
+        hoverinfo = "skip",
+        fillcolor = "rgba(51, 107, 145, 0.10)", # ohdsiBlue at 10% opacity
+        line = list(color = seriesColors[1], width = 1.5)
+      ),
+      x = position + jitter,
+      y = y,
       text = hover,
-      type = "box",
-      boxpoints = "all",
-      jitter = 0.5,
-      pointpos = 0,
-      fillcolor = "rgba(51, 107, 145, 0.10)", # ohdsiBlue at 10% opacity
-      line = list(color = seriesColors[1], width = 1.5),
+      hoverinfo = "text",
+      type = "scattergl",
+      mode = "markers",
       marker = list(color = seriesColors[1], size = 8, opacity = 0.55)
     )
   }
   plot <- plotly::subplot(panel("ppv"), panel("sensitivity"), nrows = 1, shareY = TRUE, margin = 0.04)
   categoryAxis <- list(
-    categoryorder = "array",
-    categoryarray = categoryLabels,
+    tickmode = "array",
+    tickvals = seq_along(groupLevels),
+    ticktext = categoryLabels,
+    range = c(0.4, length(groupLevels) + 0.6),
     linecolor = axisColor,
     tickfont = list(color = inkSecondary)
   )

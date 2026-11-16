@@ -105,7 +105,9 @@ performanceUi <- function(id) {
         scrollZoomSwitch(ns("scrollZoomCompare")),
         plotly::plotlyOutput(ns("comparison"), height = "520px")
       ),
-      bslib::nav_panel("Table", DT::DTOutput(ns("table")))
+      # The plain wrapper gives the table its natural height; a bare DT output is a fill item and can collapse to nothing
+      # in this card, which has no fixed height.
+      bslib::nav_panel("Table", tags$div(style = "min-height: 300px;", DT::DTOutput(ns("table"))))
     )
     )
   )
@@ -249,7 +251,7 @@ performanceServer <- function(id, evaluations, shortlist, onOpenPhenotype, onCom
         escape = FALSE,
         rownames = FALSE,
         selection = "none",
-        options = list(pageLength = 25)
+        options = list(pageLength = 25, scrollX = TRUE)
       )
     })
   })

@@ -122,7 +122,7 @@ test_that("buildComparison makes a PPV and a sensitivity panel for every groupin
   skip_if_not_installed("plotly")
   data <- seedEvaluations()
   for (groupBy in c("database", "source", "evaluationType")) {
-    expect_length(builtTraces(buildComparison(data, groupBy)), 2)
+    expect_length(builtTraces(buildComparison(data, groupBy)), 4) # a box and its points per panel
   }
   expect_true(all(vapply(builtTraces(buildComparison(emptyEvaluations())), function(trace) length(trace$x) == 0, TRUE)))
 })

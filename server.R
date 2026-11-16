@@ -138,7 +138,8 @@ function(input, output, session) {
     navigate = navigate,
     shortlist = shortlist,
     onRefine = refinePhenotype,
-    vocabularyRunner = vocabularyRunner
+    vocabularyRunner = vocabularyRunner,
+    evaluations = evaluations
   )
   performanceServer("performance", evaluations, shortlist = shortlist, onOpenPhenotype = openPhenotype,
                     onCompare = comparePhenotypes,

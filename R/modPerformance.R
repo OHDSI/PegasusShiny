@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 
 # Empty databases / phenotypeIds mean "no restriction".
-filterEvaluations <- function(data, evalTypes, sources, databases, phenotypeIds, minPpv, minSensitivity) {
+# cohortDefinitionIds is optional and likewise empty for no restriction.
+filterEvaluations <- function(data, evalTypes, sources, databases, phenotypeIds, minPpv, minSensitivity,
+                              cohortDefinitionIds = NULL) {
   keep <- data$evaluationType %in% evalTypes &
     data$cdSourceType %in% sources &
     data$ppv >= minPpv / 100 &
@@ -24,6 +26,9 @@ filterEvaluations <- function(data, evalTypes, sources, databases, phenotypeIds,
   }
   if (length(phenotypeIds) > 0) {
     keep <- keep & data$phenotypeId %in% as.integer(phenotypeIds)
+  }
+  if (length(cohortDefinitionIds) > 0) {
+    keep <- keep & data$cohortDefinitionId %in% as.integer(cohortDefinitionIds)
   }
   data[keep, , drop = FALSE]
 }

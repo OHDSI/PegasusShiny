@@ -257,3 +257,41 @@ test_that("person counts of databases with the same abbreviation stay in separat
   expect_equal(result[["D (v1)"]], c(10, 20))
   expect_equal(result[["D (v2)"]], c(30, 40))
 })
+
+test_that("browse server filters phenotypes by their evaluations", {
+  pool <- createTestPool()
+  on.exit(pool::poolClose(pool))
+  loadSeedData(pool)
+  phenotypes <- reactiveVal(withConnection(pool, function(connection) getPhenotypeSummary(connection, "main")))
+  evaluations <- reactiveVal(withConnection(pool, function(connection) getEvaluations(connection, "main")))
+
+  testServer(
+    browseServer,
+    args = list(
+      connectionPool = pool,
+      databaseSchema = "main",
+      phenotypes = phenotypes,
+      refreshPhenotypes = function() NULL,
+      route = reactiveVal(NULL),
+      navigate = function(page = NULL, id = NULL) NULL,
+      shortlist = reactiveVal(integer(0)),
+      onRefine = function(id) NULL,
+      evaluations = evaluations
+    ),
+    {
+      session$setInputs(status = statusLevels, creator = NULL, minPpv = 0, minSensitivity = 0)
+      expect_equal(nrow(filtered()), nrow(phenotypes()))
+
+      evals <- evaluations()
+      session$setInputs(databases = evals$databaseLabel[1])
+      expected <- unique(evals$phenotypeId[evals$databaseLabel == evals$databaseLabel[1]])
+      expect_setequal(filtered()$phenotypeId, expected)
+
+      session$setInputs(databases = NULL, cohortDefinitions = evals$cohortDefinitionId[1])
+      expect_setequal(filtered()$phenotypeId, evals$phenotypeId[evals$cohortDefinitionId == evals$cohortDefinitionId[1]])
+
+      session$setInputs(cohortDefinitions = NULL, minPpv = 101)
+      expect_equal(nrow(filtered()), 0)
+    }
+  )
+})

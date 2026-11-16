@@ -128,6 +128,15 @@ browseUi <- function(id) {
           checkboxGroupInput(ns("status"), "Status", choices = statusLevels, selected = statusLevels),
           selectInput(ns("creator"), "Creator", choices = character(0), multiple = TRUE),
           helpText("Leave creator empty to show all creators."),
+          tags$hr(),
+          # These match against the evaluations of each phenotype's cohort definitions, like the Performance tab.
+          filterPicker(ns("cohortDefinitions"), "Cohort definitions", "Any cohort definition", liveSearch = TRUE),
+          filterPicker(ns("databases"), "Databases", "All databases"),
+          filterPicker(ns("evalTypes"), "Evaluation type", "None selected"),
+          filterPicker(ns("sources"), "Source type", "None selected"),
+          sliderInput(ns("minPpv"), "Minimum PPV (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+          sliderInput(ns("minSensitivity"), "Minimum sensitivity (%)", min = 0, max = 100, value = 0, step = 5, width = "100%"),
+          helpText("With any of these narrowed, only phenotypes with a matching evaluation are shown."),
           actionButton(ns("refresh"), "Refresh", icon = icon("rotate"), class = "btn-sm"),
           progressUi(ns("progress"))
         ),
@@ -150,7 +159,8 @@ browseUi <- function(id) {
 }
 
 browseServer <- function(id, connectionPool, databaseSchema, phenotypes, refreshPhenotypes, route, navigate, shortlist, onRefine,
-                         vocabularyRunner = NULL, progressSchema = databaseSchema) {
+                         vocabularyRunner = NULL, progressSchema = databaseSchema,
+                         evaluations = reactive(emptyEvaluations())) {
   # Evaluate eagerly so a missing argument fails at startup instead of on the first click.
   force(onRefine)
   moduleServer(id, function(input, output, session) {
@@ -168,11 +178,57 @@ browseServer <- function(id, connectionPool, databaseSchema, phenotypes, refresh
       )
     })
 
+    observeEvent(evaluations(), {
+      data <- evaluations()
+      evalTypes <- orderedLevels(data$evaluationType, evaluationTypeOrder)
+      sources <- orderedLevels(data$cdSourceType, sourceTypeOrder)
+      shinyWidgets::updatePickerInput(session, "evalTypes", choices = evalTypes, selected = evalTypes)
+      shinyWidgets::updatePickerInput(session, "sources", choices = sources, selected = sources)
+      shinyWidgets::updatePickerInput(session, "databases", choices = unique(data$databaseLabel[order(data$databaseId)]),
+                                      selected = character(0))
+      cohorts <- data[!duplicated(data$cohortDefinitionId), c("cohortDefinitionId", "cohortDefinitionName")]
+      cohorts <- cohorts[order(cohorts$cohortDefinitionName), ]
+      shinyWidgets::updatePickerInput(
+        session,
+        "cohortDefinitions",
+        choices = stats::setNames(cohorts$cohortDefinitionId, cohorts$cohortDefinitionName),
+        selected = character(0)
+      )
+    })
+
+    # Evaluation filters only restrict the list once narrowed; until then phenotypes without evaluations stay visible.
+    # Pickers that have not been filled yet (NULL) count as unrestricted.
+    evaluationFilterActive <- reactive({
+      data <- evaluations()
+      allTypes <- orderedLevels(data$evaluationType, evaluationTypeOrder)
+      allSources <- orderedLevels(data$cdSourceType, sourceTypeOrder)
+      length(input$databases) > 0 ||
+        length(input$cohortDefinitions) > 0 ||
+        isTRUE(input$minPpv > 0) ||
+        isTRUE(input$minSensitivity > 0) ||
+        (!is.null(input$evalTypes) && !setequal(input$evalTypes, allTypes)) ||
+        (!is.null(input$sources) && !setequal(input$sources, allSources))
+    })
+
     filtered <- reactive({
       data <- phenotypes()
       data <- data[data$status %in% input$status, , drop = FALSE]
       if (length(input$creator) > 0) {
         data <- data[data$creator %in% input$creator, , drop = FALSE]
+      }
+      if (evaluationFilterActive()) {
+        evals <- evaluations()
+        matching <- filterEvaluations(
+          evals,
+          evalTypes = if (is.null(input$evalTypes)) unique(evals$evaluationType) else input$evalTypes,
+          sources = if (is.null(input$sources)) unique(evals$cdSourceType) else input$sources,
+          databases = input$databases,
+          phenotypeIds = integer(0),
+          minPpv = if (is.null(input$minPpv)) 0 else input$minPpv,
+          minSensitivity = if (is.null(input$minSensitivity)) 0 else input$minSensitivity,
+          cohortDefinitionIds = input$cohortDefinitions
+        )
+        data <- data[data$phenotypeId %in% matching$phenotypeId, , drop = FALSE]
       }
       data
     })

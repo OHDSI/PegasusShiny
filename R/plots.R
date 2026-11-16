@@ -147,10 +147,10 @@ scrollZoomSwitch <- function(id) {
 # The PPV vs sensitivity scatter fills its column's width. The default height leaves room above it for the tab
 # header and below it for the plot controls, so the whole plot fits in the window without scrolling.
 scatterPlotOutput <- function(outputId, height = "calc(100vh - 380px)") {
-  # validateCssUnit only accepts calc() here, not max(), so the floor is a min-height style.
-  htmltools::tagAppendAttributes(
-    plotly::plotlyOutput(outputId, width = "100%", height = height),
-    style = "min-height: 420px;"
+  # validateCssUnit rejects max(), so the floor is a min-height on a wrapper that sizes the plot.
+  tags$div(
+    style = sprintf("height: %s; min-height: 420px;", height),
+    plotly::plotlyOutput(outputId, width = "100%", height = "100%")
   )
 }
 

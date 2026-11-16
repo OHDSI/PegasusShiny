@@ -242,7 +242,7 @@ createServer <- function(id, connectionPool, databaseSchema, llmConfig, systemPr
     observeEvent(input$clearClone, reset())
 
     startRefinement <- function(name, initialDefinition) {
-      name <- trimws(name)
+      name <- cleanPhenotypeName(name)
       if (!nzchar(name)) {
         showNotification("Please enter a phenotype name.", type = "warning")
         return()
@@ -319,7 +319,7 @@ createServer <- function(id, connectionPool, databaseSchema, llmConfig, systemPr
         }
       )
       if (!is.null(savedId)) {
-        showNotification(sprintf("Saved phenotype '%s'.", trimws(input$saveName)), type = "message")
+        showNotification(sprintf("Saved phenotype '%s'.", cleanPhenotypeName(input$saveName)), type = "message")
         refreshPhenotypes()
         reset()
         onSaved(savedId)

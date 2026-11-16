@@ -36,8 +36,14 @@ getPhenotypes <- function(connection, databaseSchema) {
   )
 }
 
+# Non-breaking spaces (U+00A0) are converted to regular spaces so that leading and
+# trailing ones are trimmed with the rest of the whitespace (base trimws() ignores them).
+cleanPhenotypeName <- function(name) {
+  trimws(gsub("\u00a0", " ", name, fixed = TRUE))
+}
+
 normalizeName <- function(name) {
-  tolower(trimws(name))
+  tolower(cleanPhenotypeName(name))
 }
 
 phenotypeNameExists <- function(name, existingNames) {
@@ -64,7 +70,7 @@ getNextPhenotypeId <- function(connection, databaseSchema) {
 }
 
 savePhenotype <- function(connection, databaseSchema, name, clinicalDefinition, creator, parentPhenotypeId = NA_integer_) {
-  name <- trimws(name)
+  name <- cleanPhenotypeName(name)
   clinicalDefinition <- trimws(clinicalDefinition)
   if (!nzchar(name)) {
     stop("The phenotype name cannot be empty.")

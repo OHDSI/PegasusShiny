@@ -17,7 +17,8 @@
 # Run Pegasus (Beta): requests a run of the backend pipeline with explicit parameters, and is where phenotypes are
 # created, refined and evaluated. The app writes a row to pegasus_run_request (see sql/CreateProgressTables.sql) and the
 # backend's queue poller turns it into a run, which then shows up in the progress button on the Browse tab. Only
-# parameters the backend accepts are sent; the cohort definition box is a preview of what is coming.
+# parameters the backend accepts are sent; the cohort definition box is a preview of what is coming. The language
+# models and core count are not set here: the backend's defaults apply and only an admin changes them.
 
 # The steps of the backend pipeline, in order. Keep in step with Pegasus::createCohortDefinitionsAndEvaluateSteps; the
 # summary panel lists them so users can see what a launch will do.
@@ -40,37 +41,35 @@ launchTabName <- "Run Pegasus (Beta)"
 # greyed out; it goes before the evaluation because the definition has to exist to be evaluated.
 launchUserDefinitionStep <- "Your cohort definition"
 
-launchSummarySteps <- function() {
-  evaluation <- length(launchPipelineSteps)
-  c(launchPipelineSteps[-evaluation], launchUserDefinitionStep, launchPipelineSteps[evaluation])
+# The cohort creation approaches a user can switch off. If neither is chosen the run only evaluates (the concept sets are
+# still created and counted).
+# The values are the ones Pegasus::processRequest takes for cohortCreationApproaches.
+launchCohortCreationChoices <- c("Templates" = "templates", "MonoFlow (LLM agent)" = "monoflow")
+launchCohortCreationSteps <- c(
+  templates = "Cohort definitions (templates)",
+  monoflow = "Cohort definitions (MonoFlow agent)"
+)
+
+launchSummarySteps <- function(cohortCreation = unname(launchCohortCreationChoices)) {
+  skipped <- unname(launchCohortCreationSteps[setdiff(names(launchCohortCreationSteps), cohortCreation)])
+  steps <- setdiff(launchPipelineSteps, skipped)
+  evaluation <- length(steps)
+  c(steps[-evaluation], launchUserDefinitionStep, steps[evaluation])
 }
 
 launchIntents <- c("New phenotype" = "NEW_PHENOTYPE", "Re-run an existing phenotype" = "RERUN")
-
-# Options users will want that the backend does not take yet. They are shown disabled so the layout stays put when
-# the backend learns them.
-launchUnavailableOptions <- c(
-  "Skip the MonoFlow cohort definitions",
-  "Skip the template cohort definitions",
-  "Regenerate concept sets instead of reusing existing ones",
-  "Choose the standard concept sets to use",
-  "Evaluation types other than Keeper"
-)
-
-maxLaunchCores <- 16L
 
 blankToNa <- function(x) {
   if (is.null(x) || length(x) == 0 || is.na(x) || !nzchar(trimws(x))) NA_character_ else trimws(x)
 }
 
 # What has to be right before a run can be launched, one row per check (ok, and what is wrong when it is not).
-launchChecklist <- function(intent, name, description, phenotypeId, databaseIds, maxCores, existingNames,
+launchChecklist <- function(intent, name, description, phenotypeId, databaseIds, existingNames,
                             hasActiveRun = FALSE, signedIn = TRUE) {
   check <- function(item, ok, detail = "") data.frame(item = item, ok = isTRUE(ok), detail = if (isTRUE(ok)) "" else detail)
   name <- trimws(if (is.null(name)) "" else name)
   description <- trimws(if (is.null(description)) "" else description)
   phenotypeId <- if (is.null(phenotypeId) || length(phenotypeId) == 0) NA_integer_ else phenotypeId
-  maxCores <- if (is.null(maxCores) || length(maxCores) == 0) NA_real_ else maxCores
   rows <- list(check("Signed in", signedIn, "You are not logged in."))
   if (identical(intent, "NEW_PHENOTYPE") && !is.na(phenotypeId)) {
     # The phenotype was already saved by the refinement wizard, so only the run settings remain.
@@ -87,27 +86,27 @@ launchChecklist <- function(intent, name, description, phenotypeId, databaseIds,
       check("No run in progress", !hasActiveRun, "This phenotype already has a run waiting or in progress.")
     ))
   }
-  coresOk <- is.na(maxCores) || (maxCores >= 1 && maxCores <= maxLaunchCores && maxCores == round(maxCores))
-  rows <- c(rows, list(
-    check("Databases", length(databaseIds) > 0, "Choose at least one database."),
-    check("Cores", coresOk, sprintf("Use a whole number from 1 to %d, or leave it empty for the default.", maxLaunchCores))
-  ))
+  rows <- c(rows, list(check("Databases", length(databaseIds) > 0, "Choose at least one database.")))
   do.call(rbind, rows)
 }
 
-# One row for pegasus_run_request. Empty optional settings stay NA, which the backend reads as "use the default".
-buildRunRequest <- function(runRequestId, intent, phenotypeId, databaseIds, llmModel = NULL, llmFrontierModel = NULL,
-                            maxCores = NULL, requestedBy, timeRequested = Sys.time()) {
+# One row for pegasus_run_request. The model and core settings stay NA, which the backend reads as "use the default":
+# users do not choose them, only an admin changes the backend's defaults. The cohort creation approaches go in
+# request_options as {"cohortCreationApproaches": [...]}, an empty array when the run only evaluates.
+buildRunRequest <- function(runRequestId, intent, phenotypeId, databaseIds, requestedBy,
+                            cohortCreation = unname(launchCohortCreationChoices), timeRequested = Sys.time()) {
   attr(timeRequested, "tzone") <- "UTC"
   data.frame(
     runRequestId = as.integer(runRequestId),
     requestType = intent,
     phenotypeId = as.integer(phenotypeId),
     databaseIds = as.character(jsonlite::toJSON(as.integer(databaseIds), auto_unbox = FALSE)),
-    llmModel = blankToNa(llmModel),
-    llmFrontierModel = blankToNa(llmFrontierModel),
-    maxCores = if (is.null(maxCores) || length(maxCores) == 0 || is.na(maxCores)) NA_integer_ else as.integer(maxCores),
-    requestOptions = NA_character_,
+    llmModel = NA_character_,
+    llmFrontierModel = NA_character_,
+    maxCores = NA_integer_,
+    requestOptions = as.character(jsonlite::toJSON(
+      list(cohortCreationApproaches = as.list(as.character(cohortCreation))), auto_unbox = TRUE
+    )),
     requestedBy = requestedBy,
     timeRequested = timeRequested,
     status = "REQUESTED",
@@ -130,9 +129,9 @@ requestDatabaseLabels <- function(json, databases) {
 # Saves a request for a phenotype that exists, and returns its id. A new phenotype without an id is created first (draft,
 # so it shows in Browse as queued), which also reports a name that is already taken before anything is requested. A new
 # phenotype that was already saved (by the refinement wizard) is passed with its id.
-submitRunRequest <- function(connection, databaseSchema, progressSchema, intent, phenotypeId = NA_integer_, name = "",
-                             description = "", databaseIds, llmModel = NULL, llmFrontierModel = NULL, maxCores = NULL,
-                             requestedBy) {
+submitRunRequest <- function(connection, databaseSchema, intent, phenotypeId = NA_integer_, name = "",
+                             description = "", databaseIds, requestedBy,
+                             cohortCreation = unname(launchCohortCreationChoices)) {
   if (length(databaseIds) == 0) {
     stop("Choose at least one database.")
   }
@@ -141,11 +140,9 @@ submitRunRequest <- function(connection, databaseSchema, progressSchema, intent,
   } else if (is.na(phenotypeId)) {
     stop("Choose the phenotype to re-run.")
   }
-  runRequestId <- getNextId(connection, progressSchema, "pegasus_run_request", "run_request_id")
-  request <- buildRunRequest(
-    runRequestId, intent, phenotypeId, databaseIds, llmModel, llmFrontierModel, maxCores, requestedBy
-  )
-  insertPegasusRows(connection, progressSchema, "pegasus_run_request", request)
+  runRequestId <- getNextId(connection, databaseSchema, "pegasus_run_request", "run_request_id")
+  request <- buildRunRequest(runRequestId, intent, phenotypeId, databaseIds, requestedBy, cohortCreation)
+  insertPegasusRows(connection, databaseSchema, "pegasus_run_request", request)
   list(runRequestId = runRequestId, phenotypeId = as.integer(phenotypeId))
 }
 
@@ -158,7 +155,7 @@ emptyRunRequests <- function() {
   )
 }
 
-getRunRequests <- function(connection, databaseSchema, progressSchema, limit = 200) {
+getRunRequests <- function(connection, databaseSchema, limit = 200) {
   sql <- "SELECT TOP @limit r.run_request_id,
     r.request_type,
     r.phenotype_id,
@@ -170,13 +167,13 @@ getRunRequests <- function(connection, databaseSchema, progressSchema, limit = 2
     r.run_id,
     ru.status AS run_status,
     r.message
-  FROM @progress_schema.pegasus_run_request r
+  FROM @database_schema.pegasus_run_request r
   INNER JOIN @database_schema.phenotype p
     ON p.phenotype_id = r.phenotype_id
-  LEFT JOIN @progress_schema.pegasus_run ru
+  LEFT JOIN @database_schema.pegasus_run ru
     ON ru.run_id = r.run_id
   ORDER BY r.time_requested DESC, r.run_request_id DESC;"
-  queryPegasus(connection, databaseSchema, sql, progress_schema = progressSchema, limit = as.integer(limit))
+  queryPegasus(connection, databaseSchema, sql, limit = as.integer(limit))
 }
 
 # Where a request is in its life, for the table.
@@ -254,7 +251,19 @@ launchUi <- function(id) {
         ),
         bslib::card(
           fill = FALSE,
-          bslib::card_header("4. Cohort definition (optional)"),
+          bslib::card_header("4. Cohort creation"),
+          checkboxGroupInput(
+            ns("cohortCreation"), "Create cohort definitions with",
+            choices = launchCohortCreationChoices, selected = unname(launchCohortCreationChoices)
+          ),
+          helpText(
+            "If neither is chosen, no cohort definitions are created and the run only evaluates the existing ones.",
+            "Concept sets are still created and counted."
+          )
+        ),
+        bslib::card(
+          fill = FALSE,
+          bslib::card_header("5. Cohort definition (optional)"),
           tags$div(
             class = "alert alert-warning py-2",
             icon("triangle-exclamation"), " ",
@@ -268,25 +277,6 @@ launchUi <- function(id) {
           ),
           uiOutput(ns("jsonStatus")),
           numericInput(ns("atlasId"), "Atlas cohort ID (optional)", value = NA, min = 1, step = 1, width = "50%")
-        ),
-        bslib::accordion(
-          open = FALSE,
-          bslib::accordion_panel(
-            "5. Advanced settings",
-            helpText("Leave these empty to use the backend's defaults."),
-            textInput(ns("llmModel"), "Language model", placeholder = "Backend default", width = "100%"),
-            textInput(ns("llmFrontierModel"), "Frontier model (cohort definition agent)", placeholder = "Backend default", width = "100%"),
-            numericInput(ns("maxCores"), "Maximum cores", value = NA, min = 1, max = maxLaunchCores, step = 1, width = "50%"),
-            tags$h6(class = "mt-3", "Not available yet"),
-            helpText("The backend does not take these options yet."),
-            lapply(launchUnavailableOptions, function(label) {
-              tags$div(
-                class = "form-check text-muted",
-                tags$input(class = "form-check-input", type = "checkbox", disabled = NA),
-                tags$label(class = "form-check-label", label)
-              )
-            })
-          )
         )
       ),
       bslib::card(
@@ -334,7 +324,7 @@ launchTabUi <- function() {
 
 # onRefine(name, definition) opens the refinement wizard, which comes back with preselect = list(id, nonce) once the
 # refined phenotype is saved.
-launchServer <- function(id, connectionPool, databaseSchema, progressSchema, userName, phenotypes, refreshPhenotypes,
+launchServer <- function(id, connectionPool, databaseSchema, userName, phenotypes, refreshPhenotypes,
                          onRefine = function(name, definition) NULL, preselect = reactiveVal(NULL),
                          llmConfig = NULL) {
   moduleServer(id, function(input, output, session) {
@@ -481,7 +471,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
     requests <- reactive({
       requestsVersion()
       tryCatch(
-        withConnection(connectionPool, function(connection) getRunRequests(connection, databaseSchema, progressSchema)),
+        withConnection(connectionPool, function(connection) getRunRequests(connection, databaseSchema)),
         error = function(e) {
           logEvent("run requests could not be read: ", conditionMessage(e))
           emptyRunRequests()
@@ -496,7 +486,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
       waiting <- any(requests()$phenotypeId == id & requests()$status == "REQUESTED")
       running <- tryCatch(
         withConnection(connectionPool, function(connection) {
-          runs <- getRuns(connection, databaseSchema, progressSchema)
+          runs <- getRuns(connection, databaseSchema)
           any(runs$phenotypeId == id & isActiveRun(runs$status))
         }),
         error = function(e) FALSE
@@ -512,16 +502,19 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
     checklist <- reactive({
       launchChecklist(
         intent = input$intent, name = input$name, description = input$description, phenotypeId = launchPhenotypeId(),
-        databaseIds = input$databases, maxCores = input$maxCores, existingNames = phenotypes()$phenotypeName,
+        databaseIds = input$databases, existingNames = phenotypes()$phenotypeName,
         hasActiveRun = hasActiveRun(), signedIn = signedIn
       )
     })
+
+    # NULL (nothing ticked, or the box not drawn yet) is "neither", which the form describes as evaluate only.
+    selectedCohortCreation <- reactive(if (is.null(input$cohortCreation)) character(0) else input$cohortCreation)
 
     output$summary <- renderUI({
       checks <- checklist()
       steps <- tags$ol(
         class = "small mb-0 ps-3",
-        lapply(launchSummarySteps(), function(step) {
+        lapply(launchSummarySteps(selectedCohortCreation()), function(step) {
           if (identical(step, launchUserDefinitionStep)) {
             tags$li(class = "text-muted", step, tags$span(class = "badge text-bg-secondary ms-1", "not supported yet"))
           } else {
@@ -554,9 +547,8 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
           tags$tbody(
             setting("Phenotype", what),
             setting("Databases", if (length(input$databases) == 0) NA_character_ else paste(databases()$databaseLabel[match(as.integer(input$databases), databases()$databaseId)], collapse = ", ")),
-            setting("Language model", blankToNa(input$llmModel)),
-            setting("Frontier model", blankToNa(input$llmFrontierModel)),
-            setting("Maximum cores", if (is.na(input$maxCores)) NA_character_ else as.character(input$maxCores))
+            setting("Cohort creation", if (length(selectedCohortCreation()) == 0) "None (evaluate only)" else
+              paste(names(launchCohortCreationChoices)[match(selectedCohortCreation(), launchCohortCreationChoices)], collapse = ", "))
           )
         ),
         if (hasCohortDefinition()) {
@@ -567,7 +559,7 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
         },
         tags$h6("Pipeline steps"),
         steps,
-        tags$p(class = "small text-muted mt-2", "Every step runs; steps whose results already exist are reused by the backend.")
+        tags$p(class = "small text-muted mt-2", "Steps whose results already exist are reused by the backend.")
       )
     })
 
@@ -586,10 +578,10 @@ launchServer <- function(id, connectionPool, databaseSchema, progressSchema, use
       outcome <- tryCatch(
         withConnection(connectionPool, function(connection) {
           submitRunRequest(
-            connection, databaseSchema, progressSchema,
+            connection, databaseSchema,
             intent = input$intent, phenotypeId = launchPhenotypeId(), name = input$name, description = input$description,
-            databaseIds = input$databases, llmModel = input$llmModel, llmFrontierModel = input$llmFrontierModel,
-            maxCores = input$maxCores, requestedBy = userName
+            databaseIds = input$databases, requestedBy = userName,
+            cohortCreation = selectedCohortCreation()
           )
         }),
         error = function(e) {

@@ -232,7 +232,7 @@ test_that("the browse server shows the level bar for the current route and looks
   )
 })
 
-test_that("databaseLabels keeps unique abbreviations and tells shared ones apart", {
+test_that("databaseLabels gives the name and version, and tells identical ones apart", {
   databases <- data.frame(
     databaseId = 1:5,
     cdmSourceAbbreviation = c("A", "B", "B", "C", "C"),
@@ -240,10 +240,13 @@ test_that("databaseLabels keeps unique abbreviations and tells shared ones apart
     cdmReleaseDate = c("2024-01-01", "2024-01-01", "2025-01-01", "2024-01-01", "2024-01-01")
   )
   labels <- databaseLabels(databases)
-  expect_equal(labels[1:3], c("A", "B (v1)", "B (v2)"))
+  expect_equal(labels[1:3], c("A (v1)", "B (v1)", "B (v2)"))
   # Same abbreviation and release date and no identifier: the id breaks the tie
   expect_equal(labels[4:5], c("C (2024-01-01) #4", "C (2024-01-01) #5"))
   expect_false(anyDuplicated(labels) > 0)
+  # No identifier and no date: the bare abbreviation
+  expect_equal(databaseLabels(data.frame(databaseId = 1L, cdmSourceAbbreviation = "Z", cdmReleaseIdentifier = NA,
+                                         cdmReleaseDate = NA)), "Z")
 })
 
 test_that("person counts of databases with the same abbreviation stay in separate columns", {

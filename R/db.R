@@ -165,17 +165,16 @@ queryPegasus <- function(connection, databaseSchema, sql, ...) {
   )
 }
 
-# A label that is unique per database. Several databases can share an abbreviation (different releases of one
-# data source), so the abbreviation alone cannot identify a database. Unique abbreviations are used as they are;
-# shared ones get the release identifier (or the release date), and the id as a last resort.
+# A label that is unique per database: the abbreviation and its version, like "Ccae (v4020)". The version is the release
+# identifier, or the release date when there is none. A database with neither keeps the bare abbreviation, and the id
+# breaks any tie that is left (the same abbreviation and version twice).
 databaseLabels <- function(databases) {
   abbreviation <- as.character(databases$cdmSourceAbbreviation)
-  shared <- abbreviation %in% abbreviation[duplicated(abbreviation)]
   isUsable <- function(x) !is.na(x) & nzchar(trimws(x))
   identifier <- as.character(databases$cdmReleaseIdentifier)
   releaseDate <- as.character(databases$cdmReleaseDate)
   detail <- ifelse(isUsable(identifier), identifier, ifelse(isUsable(releaseDate), releaseDate, NA_character_))
-  label <- ifelse(shared & !is.na(detail), paste0(abbreviation, " (", detail, ")"), abbreviation)
+  label <- ifelse(!is.na(detail), paste0(abbreviation, " (", detail, ")"), abbreviation)
   stillShared <- label %in% label[duplicated(label)]
   ifelse(stillShared, paste0(label, " #", databases$databaseId), label)
 }

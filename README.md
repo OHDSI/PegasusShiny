@@ -11,7 +11,8 @@ The app was split out of [OHDSI/Pegasus](https://github.com/OHDSI/Pegasus) with 
 2. Create the data model and (optionally) load the sample data, from `sql/`:
    - `CreateDataModel.sql` creates the tables (`@database_schema` is the schema to create them in).
    - `DevSeedData.sql` loads a small development data set.
-   - `CreateProgressTables.sql` creates the backend's run progress tables (`@progress_schema`, set with `PEGASUS_PROGRESS_SCHEMA`; the data model schema when that is not set) and `DevSeedProgress.sql` loads a few sample runs, so the progress button on the Browse tab has something to show.
+   - `CreateProgressTables.sql` creates the backend's run progress tables and the run request table, in the same schema as the data model (`@database_schema`), and `DevSeedProgress.sql` loads a few sample runs, so the progress button on the Browse tab has something to show.
+   - `MergeSchemasCheck.sql` and `MergeSchemas.sql` merge one Pegasus schema into another (set `@target_schema` and `@source_schema`), giving the source's colliding ids new ones. Run the check first.
    - `MigrateDataModel.sql` copies an older Pegasus schema into a new one (set `@old_schema` and `@new_schema`).
 3. Start the app from this folder: `shiny::runApp()`.
 
